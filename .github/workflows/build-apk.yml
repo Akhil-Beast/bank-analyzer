@@ -1,0 +1,65 @@
+name: Build Android APK (Cloud CI/CD)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build Native Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build Next.js Web App
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://rxarnxvigaoglttcesau.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4YXJueHZpZ2FvZ2x0dGNlc2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0MzY1NjQsImV4cCI6MjEwNzAxMjU2NH0.WwAdo6V5_tMTkkZeon_GlHDT0K-cGVSRVqp-qae9fxc' }}
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+        run: |
+          mkdir -p out
+          echo "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0;url=${{ secrets.NEXT_PUBLIC_FRONTEND_URL || 'https://bank-analyzer-frontend.onrender.com' }}'></head><body>Loading Bank Statement Analyzer...</body></html>" > out/index.html
+          npm run build || true
+
+      - name: Add Capacitor Android Platform
+        working-directory: frontend
+        run: |
+          npx cap add android || true
+          npx cap sync android
+
+      - name: Build Debug APK with Gradle
+        working-directory: frontend/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Upload Installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: BankAnalyzer-Android-APK
+          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

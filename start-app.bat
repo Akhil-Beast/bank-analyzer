@@ -1,18 +1,16 @@
 @echo off
 title BankAnalyzer Launcher
 echo ===================================================
-echo     Starting BankAnalyzer System
+echo     Starting BankAnalyzer System (Persistent)
 echo ===================================================
 
-cd /d "%~dp0backend"
 echo [1/3] Starting Python FastAPI Backend on port 8000...
-start "BankAnalyzer Backend (Port 8000)" cmd /k "call .\venv\Scripts\activate.bat && uvicorn main:app --host 0.0.0.0 --port 8000"
+start "BankAnalyzer Backend (Port 8000)" "%~dp0backend\run_backend.bat"
 
 timeout /t 3 /nobreak > nul
 
-cd /d "%~dp0frontend"
 echo [2/3] Starting Next.js Frontend on port 3000...
-start "BankAnalyzer Frontend (Port 3000)" cmd /k "npm run dev"
+start "BankAnalyzer Frontend (Port 3000)" "%~dp0frontend\run_frontend.bat"
 
 timeout /t 4 /nobreak > nul
 

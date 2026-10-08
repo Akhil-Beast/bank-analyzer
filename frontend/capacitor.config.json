@@ -1,0 +1,11 @@
+{
+  "appId": "com.bankanalyzer.app",
+  "appName": "Bank Statement Analyzer",
+  "webDir": "out",
+  "server": {
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}
