@@ -63,10 +63,23 @@ const getApiBase = () => {
     return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
   }
   if (typeof window !== 'undefined') {
+    const win = window as any;
+    const isCapacitor = !!(
+      win.Capacitor?.isNativePlatform?.() ||
+      win.Capacitor?.getPlatform?.() === 'android' ||
+      window.location.protocol === 'capacitor:' ||
+      (window.location.hostname === 'localhost' && window.location.port !== '3000' && window.location.port !== '8000') ||
+      navigator.userAgent.includes('Android')
+    );
+
+    if (isCapacitor) {
+      return 'https://bank-analyzer-backend.onrender.com';
+    }
+
     if (window.location.port === '3000') {
       return `http://${window.location.hostname}:8000`;
     }
-    return '';
+    return 'https://bank-analyzer-backend.onrender.com';
   }
   return 'http://localhost:8000';
 };
@@ -159,8 +172,13 @@ export default function TransactionDashboard() {
         axios.get(`${api}/api/v1/transactions`),
         axios.get(`${api}/api/v1/documents`)
       ]);
-      setTransactions(txRes.data || []);
-      setDocuments(docRes.data || []);
+
+      if (!Array.isArray(txRes.data) || !Array.isArray(docRes.data)) {
+        throw new Error("Invalid array response from backend API");
+      }
+
+      setTransactions(txRes.data);
+      setDocuments(docRes.data);
     } catch (err: any) {
       console.error("Backend fetch error, falling back to Supabase client:", err);
       try {
@@ -169,14 +187,22 @@ export default function TransactionDashboard() {
           .select('*')
           .order('transaction_date', { ascending: false });
 
-        if (!txError && txns) setTransactions(txns);
+        if (!txError && Array.isArray(txns)) {
+          setTransactions(txns);
+        } else {
+          setTransactions([]);
+        }
 
-        const { data: docs } = await supabase
+        const { data: docs, error: docError } = await supabase
           .from('documents')
           .select('*')
           .order('upload_date', { ascending: false });
 
-        if (docs) setDocuments(docs);
+        if (!docError && Array.isArray(docs)) {
+          setDocuments(docs);
+        } else {
+          setDocuments([]);
+        }
       } catch (innerErr) {
         setToastMessage({ text: "Failed to connect to backend server or database", type: 'error' });
       }
@@ -311,18 +337,20 @@ export default function TransactionDashboard() {
 
   // Dynamic Year & Month Lists based on uploaded transactions
   const availableYears = useMemo(() => {
-    const years = Array.from(new Set(transactions.map(t => t.year).filter(Boolean)));
+    const txns = Array.isArray(transactions) ? transactions : [];
+    const years = Array.from(new Set(txns.map(t => t.year).filter(Boolean)));
     return years.sort((a, b) => b - a);
   }, [transactions]);
 
   const availableMonths = useMemo(() => {
+    const txns = Array.isArray(transactions) ? transactions : [];
     if (selectedYear === 'ALL') {
-      const months = Array.from(new Set(transactions.map(t => t.month).filter(Boolean)));
+      const months = Array.from(new Set(txns.map(t => t.month).filter(Boolean)));
       return months.sort((a, b) => a - b);
     }
     const months = Array.from(
       new Set(
-        transactions
+        txns
           .filter(t => t.year.toString() === selectedYear)
           .map(t => t.month)
           .filter(Boolean)
@@ -332,13 +360,15 @@ export default function TransactionDashboard() {
   }, [transactions, selectedYear]);
 
   const availableBanks = useMemo(() => {
-    return Array.from(new Set(transactions.map(t => t.bank_name).filter(Boolean)));
+    const txns = Array.isArray(transactions) ? transactions : [];
+    return Array.from(new Set(txns.map(t => t.bank_name).filter(Boolean)));
   }, [transactions]);
 
   // Max transaction amount for slider bound
   const highestAmount = useMemo(() => {
-    if (!transactions.length) return 100000;
-    const maxVal = Math.max(...transactions.map(t => Math.max(t.debit || 0, t.credit || 0)));
+    const txns = Array.isArray(transactions) ? transactions : [];
+    if (!txns.length) return 100000;
+    const maxVal = Math.max(...txns.map(t => Math.max(t.debit || 0, t.credit || 0)));
     return Math.ceil(maxVal / 10000) * 10000 || 100000;
   }, [transactions]);
 
@@ -360,8 +390,9 @@ export default function TransactionDashboard() {
 
   // Overall Global Date Range of ALL uploaded statements
   const globalDateRange = useMemo(() => {
-    if (!transactions.length) return { start: 'N/A', end: 'N/A' };
-    const dates = transactions.map(t => t.transaction_date).filter(Boolean);
+    const txns = Array.isArray(transactions) ? transactions : [];
+    if (!txns.length) return { start: 'N/A', end: 'N/A' };
+    const dates = txns.map(t => t.transaction_date).filter(Boolean);
     if (!dates.length) return { start: 'N/A', end: 'N/A' };
     const sorted = [...dates].sort();
     return {
@@ -372,7 +403,8 @@ export default function TransactionDashboard() {
 
   // Filtered dataset
   const filteredData = useMemo(() => {
-    return transactions.filter(t => {
+    const txns = Array.isArray(transactions) ? transactions : [];
+    return txns.filter(t => {
       // Document Filter
       if (selectedDocId !== 'ALL' && t.source_document_id !== selectedDocId) return false;
 
@@ -956,7 +988,7 @@ export default function TransactionDashboard() {
                   </div>
 
                   {/* Filter by Statement Document */}
-                  {documents.length > 0 && (
+                  {Array.isArray(documents) && documents.length > 0 && (
                     <div>
                       <label className="text-xs font-semibold text-slate-700 block mb-1.5">Statement Document</label>
                       <select
@@ -1431,7 +1463,7 @@ export default function TransactionDashboard() {
 
                 {/* Download PDF Button */}
                 <a
-                  href={`/api/v1/documents/${previewDocId}/pdf`}
+                  href={`${getApiBase()}/api/v1/documents/${previewDocId}/pdf`}
                   download
                   className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
                   title="Download full PDF"
@@ -1441,7 +1473,7 @@ export default function TransactionDashboard() {
 
                 {/* Open in New Tab */}
                 <a
-                  href={`/api/v1/documents/${previewDocId}/pdf`}
+                  href={`${getApiBase()}/api/v1/documents/${previewDocId}/pdf`}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
@@ -1466,7 +1498,7 @@ export default function TransactionDashboard() {
               <div className="flex-1 bg-slate-950 overflow-auto flex items-center justify-center p-4">
                 <div className="overflow-auto max-h-full max-w-full flex items-center justify-center">
                   <img
-                    src={`/api/v1/documents/${previewDocId}/page/${previewPage}`}
+                    src={`${getApiBase()}/api/v1/documents/${previewDocId}/page/${previewPage}`}
                     alt={`Statement Page ${previewPage}`}
                     style={{ width: `${imageZoom}%`, maxWidth: 'none' }}
                     className="rounded shadow-2xl transition-all duration-200 object-contain bg-white"
@@ -1477,13 +1509,13 @@ export default function TransactionDashboard() {
               <div className="flex-1 w-full h-full min-h-0 bg-slate-100 relative">
                 <object
                   key={`${previewDocId}-${previewPage}`}
-                  data={`/api/v1/documents/${previewDocId}/pdf#page=${previewPage}&zoom=page-fit`}
+                  data={`${getApiBase()}/api/v1/documents/${previewDocId}/pdf#page=${previewPage}&zoom=page-fit`}
                   type="application/pdf"
                   className="w-full h-full border-none"
                 >
                   <iframe
                     key={`iframe-${previewDocId}-${previewPage}`}
-                    src={`/api/v1/documents/${previewDocId}/pdf#page=${previewPage}&zoom=page-fit`}
+                    src={`${getApiBase()}/api/v1/documents/${previewDocId}/pdf#page=${previewPage}&zoom=page-fit`}
                     className="w-full h-full border-none"
                     title="Statement PDF Viewer"
                   >
