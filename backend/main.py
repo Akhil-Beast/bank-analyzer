@@ -44,6 +44,11 @@ url: str = os.environ.get("SUPABASE_URL")
 key: str = os.environ.get("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
+@app.get("/")
+@app.get("/api/v1/health")
+async def health_check():
+    return {"status": "ok", "message": "Bank Analyzer API is running"}
+
 UPLOAD_DIR = os.path.abspath("uploaded_statements")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
