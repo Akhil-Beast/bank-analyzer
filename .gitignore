@@ -26,8 +26,11 @@ frontend/.env.*.local
 .env
 *.local
 
-# OS Files
+# IDE & OS Files
 .DS_Store
 Thumbs.db
 desktop.ini
 *.log
+.idea/caches/
+frontend/.idea/caches/
+**/local.properties
