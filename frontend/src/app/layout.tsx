@@ -45,6 +45,21 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  if (window.location.pathname.endsWith('index.html') || window.location.pathname === '/index.html') {
+                    window.history.replaceState(null, '', '/');
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col bg-slate-900 text-slate-100">{children}</body>
     </html>
   );
