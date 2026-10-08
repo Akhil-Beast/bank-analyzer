@@ -5,6 +5,9 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     name: Build Native Android APK
@@ -20,9 +23,6 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
@@ -34,32 +34,70 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Build Next.js Web App
+      - name: Sync Capacitor Web Assets
         working-directory: frontend
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://rxarnxvigaoglttcesau.supabase.co' }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4YXJueHZpZ2FvZ2x0dGNlc2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0MzY1NjQsImV4cCI6MjEwNzAxMjU2NH0.WwAdo6V5_tMTkkZeon_GlHDT0K-cGVSRVqp-qae9fxc' }}
-          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
         run: |
           mkdir -p out
-          echo "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0;url=${{ secrets.NEXT_PUBLIC_FRONTEND_URL || 'https://bank-analyzer-frontend.onrender.com' }}'></head><body>Loading Bank Statement Analyzer...</body></html>" > out/index.html
-          npm run build || true
-
-      - name: Add Capacitor Android Platform
-        working-directory: frontend
-        run: |
-          npx cap add android || true
+          cat << 'EOF' > out/index.html
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Bank Statement Analyzer</title>
+            <style>
+              body { margin: 0; background: #0f172a; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; text-align: center; }
+              .spinner { width: 44px; height: 44px; border: 4px solid rgba(255,255,255,0.1); border-left-color: #38bdf8; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
+              @keyframes spin { to { transform: rotate(360deg); } }
+            </style>
+          </head>
+          <body>
+            <div class="spinner"></div>
+            <h2>Bank Statement Analyzer</h2>
+            <p>Connecting to Cloud Services...</p>
+            <script>
+              window.location.href = "https://bank-analyzer-frontend.onrender.com";
+            </script>
+          </body>
+          </html>
+          EOF
           npx cap sync android
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Build Debug APK with Gradle
         working-directory: frontend/android
         run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Upload Installable APK
+      - name: Rename APK for Clarity
+        run: |
+          cp frontend/android/app/build/outputs/apk/debug/app-debug.apk frontend/android/app/build/outputs/apk/debug/BankAnalyzer-debug.apk
+
+      - name: Upload Installable APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: BankAnalyzer-Android-APK
-          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          path: frontend/android/app/build/outputs/apk/debug/BankAnalyzer-debug.apk
+          if-no-files-found: error
           retention-days: 30
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: latest
+          name: "Bank Analyzer Android App (Latest Release)"
+          body: |
+            ### 📱 Bank Statement Analyzer Mobile App
+            
+            Installable native Android APK build.
+            - **Cloud Backend:** Render & Supabase
+            - **Live 24/7:** Runs continuously without requiring local PC to be on.
+            - **Direct Download:** Download `BankAnalyzer-debug.apk` directly below to your Android device.
+          files: frontend/android/app/build/outputs/apk/debug/BankAnalyzer-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
