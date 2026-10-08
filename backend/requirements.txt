@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+python-multipart
+pdfplumber
+pandas
+supabase
+pydantic
+python-dotenv
+pypdf
+pypdfium2
+python-dateutil
+httpx
+pillow
+
