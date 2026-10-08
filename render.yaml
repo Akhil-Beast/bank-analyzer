@@ -11,36 +11,24 @@ services:
     plan: free
     envVars:
       - key: SUPABASE_URL
-        sync: false
+        value: https://rxarnxvigaoglttcesau.supabase.co
       - key: SUPABASE_KEY
-        sync: false
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4YXJueHZpZ2FvZ2x0dGNlc2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0MzY1NjQsImV4cCI6MjEwNzAxMjU2NH0.WwAdo6V5_tMTkkZeon_GlHDT0K-cGVSRVqp-qae9fxc
       - key: PYTHON_VERSION
         value: 3.11.9
 
   # -------------------------------------------------------------
-  # Next.js Frontend Service
+  # Next.js Frontend Static Service
   # -------------------------------------------------------------
-  - type: web
+  - type: static
     name: bank-analyzer-frontend
-    runtime: node
     rootDir: frontend
     buildCommand: npm install && npm run build
-    startCommand: npm start
-    plan: free
+    staticPublishPath: ./out
     envVars:
       - key: NEXT_PUBLIC_SUPABASE_URL
-        sync: false
+        value: https://rxarnxvigaoglttcesau.supabase.co
       - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
-        sync: false
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4YXJueHZpZ2FvZ2x0dGNlc2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0MzY1NjQsImV4cCI6MjEwNzAxMjU2NH0.WwAdo6V5_tMTkkZeon_GlHDT0K-cGVSRVqp-qae9fxc
       - key: NEXT_PUBLIC_API_URL
-        fromService:
-          type: web
-          name: bank-analyzer-backend
-          property: host
-      - key: BACKEND_URL
-        fromService:
-          type: web
-          name: bank-analyzer-backend
-          property: host
-      - key: NODE_VERSION
-        value: 20.11.0
+        value: https://bank-analyzer-backend.onrender.com
