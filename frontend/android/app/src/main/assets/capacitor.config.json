@@ -1,0 +1,12 @@
+{
+	"appId": "com.bankanalyzer.app",
+	"appName": "Bank Statement Analyzer",
+	"webDir": "out",
+	"server": {
+		"url": "https://bank-analyzer-frontend.onrender.com",
+		"cleartext": true
+	},
+	"android": {
+		"allowMixedContent": true
+	}
+}
