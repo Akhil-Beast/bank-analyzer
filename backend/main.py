@@ -337,6 +337,7 @@ def ensure_local_pdf(file_path: str) -> str:
         return file_path
 
 @app.post("/api/v1/upload")
+@app.post("/upload")
 async def upload_statement(file: UploadFile = File(...), password: Optional[str] = Form(None)):
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
@@ -441,6 +442,7 @@ async def upload_statement(file: UploadFile = File(...), password: Optional[str]
     }
 
 @app.get("/api/v1/transactions")
+@app.get("/transactions")
 async def get_transactions():
     try:
         res = supabase.table('transactions').select('*').order('transaction_date', desc=True).execute()
@@ -449,6 +451,7 @@ async def get_transactions():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/documents")
+@app.get("/documents")
 async def get_documents():
     try:
         res = supabase.table('documents').select('*').order('upload_date', desc=True).execute()
@@ -457,6 +460,7 @@ async def get_documents():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/documents/{document_id}/info")
+@app.get("/documents/{document_id}/info")
 async def get_document_info(document_id: str):
     res = supabase.table('documents').select('*').eq('document_id', document_id).execute()
     if not res.data:
@@ -480,6 +484,7 @@ async def get_document_info(document_id: str):
     return {**doc_data, "total_pages": total_pages}
 
 @app.get("/api/v1/documents/{document_id}/pdf")
+@app.get("/documents/{document_id}/pdf")
 async def get_document_pdf(document_id: str):
     res = supabase.table('documents').select('*').eq('document_id', document_id).execute()
     if not res.data:
@@ -502,6 +507,7 @@ async def get_document_pdf(document_id: str):
     )
 
 @app.get("/api/v1/documents/{document_id}/page/{page_num}")
+@app.get("/documents/{document_id}/page/{page_num}")
 async def get_document_page(document_id: str, page_num: int):
     res = supabase.table('documents').select('*').eq('document_id', document_id).execute()
     if not res.data:
@@ -540,6 +546,7 @@ async def get_document_page(document_id: str, page_num: int):
     except HTTPException:
         raise
 @app.delete("/api/v1/documents/{document_id}")
+@app.delete("/documents/{document_id}")
 async def delete_document(document_id: str):
     res = supabase.table('documents').select('*').eq('document_id', document_id).execute()
     if not res.data:

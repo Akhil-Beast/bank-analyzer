@@ -226,9 +226,20 @@ export default function TransactionDashboard() {
       formData.append('file', file);
 
       try {
-        const response = await axios.post(`${getApiBase()}/api/v1/upload`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
+        let response;
+        try {
+          response = await axios.post(`${getApiBase()}/api/v1/upload`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+        } catch (apiErr: any) {
+          if (apiErr.response?.status === 404) {
+            response = await axios.post(`${getApiBase()}/upload`, formData, {
+              headers: { 'Content-Type': 'multipart/form-data' }
+            });
+          } else {
+            throw apiErr;
+          }
+        }
 
         const resData = response.data;
         if (resData.status === 'password_required' || resData.status === 'invalid_password') {
@@ -271,9 +282,20 @@ export default function TransactionDashboard() {
     formData.append('password', statementPassword.trim());
 
     try {
-      const response = await axios.post(`${getApiBase()}/api/v1/upload`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      let response;
+      try {
+        response = await axios.post(`${getApiBase()}/api/v1/upload`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      } catch (apiErr: any) {
+        if (apiErr.response?.status === 404) {
+          response = await axios.post(`${getApiBase()}/upload`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+        } else {
+          throw apiErr;
+        }
+      }
 
       const resData = response.data;
       if (resData.status === 'password_required' || resData.status === 'invalid_password') {
