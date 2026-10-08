@@ -32,4 +32,4 @@ services:
       - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
         value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4YXJueHZpZ2FvZ2x0dGNlc2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0MzY1NjQsImV4cCI6MjEwNzAxMjU2NH0.WwAdo6V5_tMTkkZeon_GlHDT0K-cGVSRVqp-qae9fxc
       - key: NEXT_PUBLIC_API_URL
-        value: https://bank-analyzer-backend.onrender.com
+        value: https://bank-analyzer-backend-7aq7.onrender.com
