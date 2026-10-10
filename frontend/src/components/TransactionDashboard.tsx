@@ -92,6 +92,7 @@ export default function TransactionDashboard() {
   const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
   const [uploadResult, setUploadResult] = useState<DocumentSummary | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [dropzoneKey, setDropzoneKey] = useState(0);
 
   // Password-protected PDF Modal State
   const [pendingPasswordFile, setPendingPasswordFile] = useState<File | null>(null);
@@ -266,6 +267,7 @@ export default function TransactionDashboard() {
         setToastMessage({ text: msg, type: 'error' });
       }
     }
+    setDropzoneKey(prev => prev + 1);
     setUploading(false);
   }, []);
 
@@ -323,6 +325,7 @@ export default function TransactionDashboard() {
       const msg = err.response?.data?.detail || "Failed to unlock statement file";
       setPasswordError(msg);
     } finally {
+      setDropzoneKey(prev => prev + 1);
       setUnlocking(false);
     }
   };
@@ -812,6 +815,7 @@ export default function TransactionDashboard() {
 
           {/* Upload Button */}
           <div 
+            key={dropzoneKey}
             {...getRootProps()} 
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer shadow-sm transition-all ${
               uploading 
@@ -861,9 +865,9 @@ export default function TransactionDashboard() {
             </div>
             <button 
               onClick={() => setUploadResult(null)}
-              className="text-emerald-600 hover:text-emerald-800 p-1 cursor-pointer"
+              className="text-emerald-700 hover:text-emerald-900 bg-emerald-100 hover:bg-emerald-200 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer"
             >
-              <X className="w-4 h-4" />
+              Dismiss
             </button>
           </div>
         )}
@@ -1592,7 +1596,7 @@ export default function TransactionDashboard() {
                 </div>
               </div>
               <button 
-                onClick={() => { setPendingPasswordFile(null); setStatementPassword(''); setPasswordError(null); }}
+                onClick={() => { setPendingPasswordFile(null); setStatementPassword(''); setPasswordError(null); setDropzoneKey(prev => prev + 1); }}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -1637,7 +1641,7 @@ export default function TransactionDashboard() {
               <div className="flex items-center gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => { setPendingPasswordFile(null); setStatementPassword(''); setPasswordError(null); }}
+                  onClick={() => { setPendingPasswordFile(null); setStatementPassword(''); setPasswordError(null); setDropzoneKey(prev => prev + 1); }}
                   className="flex-1 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
                 >
                   Cancel
