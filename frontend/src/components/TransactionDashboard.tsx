@@ -5,9 +5,11 @@ import {
   UploadCloud, Search, Calendar, FileText, ArrowUpDown, 
   Filter, RefreshCw, X, Eye, EyeOff, FileSpreadsheet, Trash2,
   CheckCircle2, AlertCircle, Building2, ChevronLeft, ChevronRight,
-  SlidersHorizontal, ExternalLink, ZoomIn, ZoomOut, Layers, Lock, KeyRound, Download
+  SlidersHorizontal, ExternalLink, ZoomIn, ZoomOut, Layers, Lock, KeyRound, Download,
+  LogOut, User as UserIcon
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
 import {
@@ -85,6 +87,7 @@ const getApiBase = () => {
 };
 
 export default function TransactionDashboard() {
+  const { user, signOut } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -838,6 +841,27 @@ export default function TransactionDashboard() {
               </>
             )}
           </div>
+
+          {/* Authenticated User Status & Logout */}
+          {user && (
+            <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+              <div 
+                className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700"
+                title={`Signed in as ${user.phone || user.email || 'Authenticated User'}`}
+              >
+                <UserIcon className="w-3.5 h-3.5 text-blue-600" />
+                <span className="font-mono">{user.phone || user.email || 'User'}</span>
+              </div>
+              <button
+                onClick={signOut}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 border border-slate-200 hover:border-rose-200 rounded-lg text-xs font-bold text-slate-600 transition-colors cursor-pointer"
+                title="Sign out of your session"
+              >
+                <LogOut className="w-3.5 h-3.5 text-rose-500" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
