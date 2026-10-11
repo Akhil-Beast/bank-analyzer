@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
-import PhoneAuth from '@/components/PhoneAuth';
+import EmailAuth from '@/components/EmailAuth';
 import { RefreshCw } from 'lucide-react';
 
 const TransactionDashboard = dynamic(() => import('@/components/TransactionDashboard'), {
@@ -21,9 +21,9 @@ function AuthenticatedApp() {
     );
   }
 
-  // If user is not authenticated, display the Phone OTP login screen
+  // If user is not authenticated, display the Email OTP / Magic Link screen
   if (!user) {
-    return <PhoneAuth />;
+    return <EmailAuth />;
   }
 
   // Once authenticated, display the full BankAnalyzer dashboard
