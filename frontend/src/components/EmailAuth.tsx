@@ -78,7 +78,14 @@ export default function EmailAuth() {
       setTimeout(() => otpInputRefs.current[0]?.focus(), 150);
     } catch (err: any) {
       console.error('Send Email OTP error:', err);
-      setError(err.message || 'Failed to send verification code. Please check your email and try again.');
+      const rawMsg = err.message || '';
+      if (rawMsg.toLowerCase().includes('error sending confirmation email') || rawMsg.toLowerCase().includes('unexpected_failure')) {
+        setError(
+          'Supabase SMTP Error: Your Custom SMTP settings in Supabase failed to authenticate with Gmail. Fix: Open Supabase Project Settings -> Authentication -> SMTP Settings, toggle "Enable Custom SMTP" to OFF (or use a Google 16-letter App Password), and click Save.'
+        );
+      } else {
+        setError(rawMsg || 'Failed to send verification code. Please check your email and try again.');
+      }
     } finally {
       setLoading(false);
     }
