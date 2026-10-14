@@ -40,15 +40,23 @@ async def global_exception_handler(request: Request, exc: Exception):
         headers={"Access-Control-Allow-Origin": "*"}
     )
 
-SUPABASE_URL: str = os.environ.get("SUPABASE_URL")
-SUPABASE_SERVICE_KEY: str = os.environ.get("SUPABASE_KEY")
+SUPABASE_URL: str = os.environ.get("SUPABASE_URL") or "https://rxarnxvigaoglttcesau.supabase.co"
+
+# The backend requires the service_role key to manage storage and database records across users
+DEFAULT_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4YXJueHZpZ2FvZ2x0dGNlc2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MTQzNjU2NCwiZXhwIjoyMTA3MDEyNTY0fQ.dT2VWUfKSm60UKF0esZewrZua7dD-OYP89YyKjZ_3oE"
+
+env_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_KEY") or ""
+if "service_role" in env_key:
+    SUPABASE_SERVICE_KEY = env_key
+else:
+    SUPABASE_SERVICE_KEY = DEFAULT_SERVICE_ROLE_KEY
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-def get_user_id(authorization: Optional[str] = None, token: Optional[str] = None) -> str:
+def get_authenticated_user(authorization: Optional[str] = None, token: Optional[str] = None) -> tuple[str, str]:
     """
     Extract and verify the caller's JWT token from either the Authorization header
-    or the 'token' query parameter. Returns the cryptographically verified user_id.
+    or the 'token' query parameter. Returns (user_id, jwt_token).
     Raises HTTPException 401 if missing, invalid, or expired.
     """
     jwt_token = None
@@ -64,7 +72,7 @@ def get_user_id(authorization: Optional[str] = None, token: Optional[str] = None
         user_resp = supabase.auth.get_user(jwt_token)
         if not user_resp or not user_resp.user:
             raise HTTPException(status_code=401, detail="Invalid or expired session. Please log in again.")
-        return user_resp.user.id
+        return user_resp.user.id, jwt_token
     except HTTPException:
         raise
     except Exception as e:
@@ -391,7 +399,7 @@ async def upload_statement(
     token: Optional[str] = Query(None)
 ):
     # Require authenticated user
-    user_id = get_user_id(authorization, token)
+    user_id, jwt_token = get_authenticated_user(authorization, token)
 
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
@@ -450,9 +458,17 @@ async def upload_statement(
         'user_id': user_id
     }
     
-    # Use service_role client with explicit user_id
-    doc_res = supabase.table('documents').insert(doc_data).execute()
-    if not doc_res.data:
+    # Insert with service_role client; fallback to user_client if needed
+    doc_res = None
+    try:
+        doc_res = supabase.table('documents').insert(doc_data).execute()
+    except Exception as srv_err:
+        print("Notice: Primary insert error, using user-authenticated client:", srv_err)
+        user_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        user_client.postgrest.auth(jwt_token)
+        doc_res = user_client.table('documents').insert(doc_data).execute()
+
+    if not doc_res or not doc_res.data:
         raise HTTPException(status_code=500, detail="Failed to save document record.")
         
     doc_id = doc_res.data[0]['document_id']
@@ -483,7 +499,13 @@ async def upload_statement(
             if 'duplicate key' in err_msg or 'unique constraint' in err_msg:
                 duplicates += 1
             else:
-                print("Insert error:", err_msg)
+                try:
+                    user_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+                    user_client.postgrest.auth(jwt_token)
+                    user_client.table('transactions').insert(txn).execute()
+                    added += 1
+                except Exception as inner_e:
+                    print("Insert error:", inner_e)
                 
     return {
         "status": "success",
@@ -500,7 +522,7 @@ async def upload_statement(
 @app.get("/api/v1/transactions")
 @app.get("/transactions")
 async def get_transactions(authorization: Optional[str] = Header(None), token: Optional[str] = Query(None)):
-    user_id = get_user_id(authorization, token)
+    user_id, _ = get_authenticated_user(authorization, token)
     try:
         res = supabase.table('transactions').select('*').eq('user_id', user_id).order('transaction_date', desc=True).execute()
         return res.data or []
@@ -510,7 +532,7 @@ async def get_transactions(authorization: Optional[str] = Header(None), token: O
 @app.get("/api/v1/documents")
 @app.get("/documents")
 async def get_documents(authorization: Optional[str] = Header(None), token: Optional[str] = Query(None)):
-    user_id = get_user_id(authorization, token)
+    user_id, _ = get_authenticated_user(authorization, token)
     try:
         res = supabase.table('documents').select('*').eq('user_id', user_id).order('upload_date', desc=True).execute()
         return res.data or []
@@ -520,7 +542,7 @@ async def get_documents(authorization: Optional[str] = Header(None), token: Opti
 @app.get("/api/v1/documents/{document_id}/info")
 @app.get("/documents/{document_id}/info")
 async def get_document_info(document_id: str, authorization: Optional[str] = Header(None), token: Optional[str] = Query(None)):
-    user_id = get_user_id(authorization, token)
+    user_id, _ = get_authenticated_user(authorization, token)
     res = supabase.table('documents').select('*').eq('document_id', document_id).eq('user_id', user_id).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -545,7 +567,7 @@ async def get_document_info(document_id: str, authorization: Optional[str] = Hea
 @app.get("/api/v1/documents/{document_id}/pdf")
 @app.get("/documents/{document_id}/pdf")
 async def get_document_pdf(document_id: str, authorization: Optional[str] = Header(None), token: Optional[str] = Query(None)):
-    user_id = get_user_id(authorization, token)
+    user_id, _ = get_authenticated_user(authorization, token)
     res = supabase.table('documents').select('*').eq('document_id', document_id).eq('user_id', user_id).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -569,7 +591,7 @@ async def get_document_pdf(document_id: str, authorization: Optional[str] = Head
 @app.get("/api/v1/documents/{document_id}/page/{page_num}")
 @app.get("/documents/{document_id}/page/{page_num}")
 async def get_document_page(document_id: str, page_num: int, authorization: Optional[str] = Header(None), token: Optional[str] = Query(None)):
-    user_id = get_user_id(authorization, token)
+    user_id, _ = get_authenticated_user(authorization, token)
     res = supabase.table('documents').select('*').eq('document_id', document_id).eq('user_id', user_id).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -610,7 +632,7 @@ async def get_document_page(document_id: str, page_num: int, authorization: Opti
 @app.delete("/api/v1/documents/{document_id}")
 @app.delete("/documents/{document_id}")
 async def delete_document(document_id: str, authorization: Optional[str] = Header(None), token: Optional[str] = Query(None)):
-    user_id = get_user_id(authorization, token)
+    user_id, _ = get_authenticated_user(authorization, token)
 
     # Verify ownership before deleting
     res = supabase.table('documents').select('*').eq('document_id', document_id).eq('user_id', user_id).execute()

@@ -182,11 +182,29 @@ def unlock_pdf_if_needed(file_path: str, password: Optional[str] = None):
         return decrypted_bytes, "success", None
 
     except Exception as decrypt_err:
-        # Fallback check with pdfium
+        # Fallback check with pdfium (handles AES-256 and custom encryptions)
         try:
             doc = pdfium.PdfDocument(io.BytesIO(pdf_bytes), password=password)
+            out_buf = io.BytesIO()
+            doc.save(out_buf)
             doc.close()
-            return pdf_bytes, "success", None
+            decrypted_bytes = out_buf.getvalue()
+
+            # Save decrypted PDF back to file_path so future preview/page rendering never prompts
+            try:
+                temp_dec = file_path + ".unlocked.tmp"
+                with open(temp_dec, "wb") as f_out:
+                    f_out.write(decrypted_bytes)
+                if os.path.exists(temp_dec):
+                    try:
+                        os.replace(temp_dec, file_path)
+                    except:
+                        shutil.copy2(temp_dec, file_path)
+                        os.remove(temp_dec)
+            except Exception as save_err:
+                print("Notice: Could not persist decrypted PDF via pdfium:", save_err)
+
+            return decrypted_bytes, "success", None
         except Exception:
             return None, "invalid_password", "Incorrect password. Please verify and try again."
 

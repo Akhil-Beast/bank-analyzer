@@ -297,7 +297,13 @@ export default function TransactionDashboard() {
 
         await fetchData();
       } catch (err: any) {
-        const msg = err.response?.data?.detail || "Error parsing statement file";
+        let msg = err.response?.data?.detail || err.message || "Error parsing statement file";
+        if (typeof msg === 'string') {
+          const match = msg.match(/'message':\s*['"]([^'"]+)['"]/);
+          if (match) msg = match[1];
+        } else if (typeof msg === 'object' && msg.message) {
+          msg = String(msg.message);
+        }
         setToastMessage({ text: msg, type: 'error' });
       }
     }
@@ -357,7 +363,13 @@ export default function TransactionDashboard() {
       setPasswordError(null);
       await fetchData();
     } catch (err: any) {
-      const msg = err.response?.data?.detail || "Failed to unlock statement file";
+      let msg = err.response?.data?.detail || err.message || "Failed to unlock statement file";
+      if (typeof msg === 'string') {
+        const match = msg.match(/'message':\s*['"]([^'"]+)['"]/);
+        if (match) msg = match[1];
+      } else if (typeof msg === 'object' && msg.message) {
+        msg = String(msg.message);
+      }
       setPasswordError(msg);
     } finally {
       setDropzoneKey(prev => prev + 1);

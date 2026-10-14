@@ -62,6 +62,17 @@ CREATE POLICY "transactions_update" ON transactions
 CREATE POLICY "transactions_delete" ON transactions
   FOR DELETE TO authenticated USING (auth.uid() = user_id);
 
+-- Explicit full access for backend service_role operations
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'documents_service_role') THEN
+    CREATE POLICY "documents_service_role" ON documents FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'transactions_service_role') THEN
+    CREATE POLICY "transactions_service_role" ON transactions FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
 -- STEP 8: Storage policies for authenticated users
 DO $$
 BEGIN
