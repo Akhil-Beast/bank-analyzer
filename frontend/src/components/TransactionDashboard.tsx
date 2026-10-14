@@ -382,10 +382,27 @@ export default function TransactionDashboard() {
     accept: { 'application/pdf': ['.pdf'] }
   });
 
-  // Remove / Delete uploaded PDF Document
+  // Remove / Delete uploaded PDF Document (Optimistic UI for 0ms instant feedback)
   const handleRemoveDocument = async (docId: string, fileName: string) => {
     if (!window.confirm(`Are you sure you want to remove "${fileName}"?\nThis will permanently delete the document and all its extracted transactions.`)) {
       return;
+    }
+
+    // Save previous state in case network request fails
+    const prevDocs = [...documents];
+    const prevTxns = [...transactions];
+
+    // Optimistically remove from state immediately (0ms visual delay)
+    setDocuments(prev => prev.filter(d => d.document_id !== docId));
+    setTransactions(prev => prev.filter(t => t.source_document_id !== docId));
+    if (selectedDocId === docId) {
+      setSelectedDocId('ALL');
+    }
+    if (previewDocId === docId) {
+      setPreviewDocId(null);
+    }
+    if (uploadResult?.document_id === docId) {
+      setUploadResult(null);
     }
 
     setDeletingDocId(docId);
@@ -396,11 +413,10 @@ export default function TransactionDashboard() {
         text: `Successfully deleted "${fileName}" and associated transactions.`,
         type: 'success'
       });
-      if (selectedDocId === docId) {
-        setSelectedDocId('ALL');
-      }
-      await fetchData();
     } catch (err: any) {
+      // Rollback to previous state on failure
+      setDocuments(prevDocs);
+      setTransactions(prevTxns);
       const msg = err.response?.data?.detail || "Failed to remove document";
       setToastMessage({ text: msg, type: 'error' });
     } finally {
