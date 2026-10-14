@@ -3,7 +3,7 @@ import uuid
 import datetime
 import re
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from supabase import create_client, Client
@@ -40,9 +40,36 @@ async def global_exception_handler(request: Request, exc: Exception):
         headers={"Access-Control-Allow-Origin": "*"}
     )
 
-url: str = os.environ.get("SUPABASE_URL")
-key: str = os.environ.get("SUPABASE_KEY")
-supabase: Client = create_client(url, key)
+SUPABASE_URL: str = os.environ.get("SUPABASE_URL")
+SUPABASE_SERVICE_KEY: str = os.environ.get("SUPABASE_KEY")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+def get_user_id(authorization: Optional[str] = None, token: Optional[str] = None) -> str:
+    """
+    Extract and verify the caller's JWT token from either the Authorization header
+    or the 'token' query parameter. Returns the cryptographically verified user_id.
+    Raises HTTPException 401 if missing, invalid, or expired.
+    """
+    jwt_token = None
+    if authorization and authorization.startswith("Bearer "):
+        jwt_token = authorization[len("Bearer "):].strip()
+    elif token:
+        jwt_token = token.strip()
+
+    if not jwt_token:
+        raise HTTPException(status_code=401, detail="Authentication required. Please log in.")
+
+    try:
+        user_resp = supabase.auth.get_user(jwt_token)
+        if not user_resp or not user_resp.user:
+            raise HTTPException(status_code=401, detail="Invalid or expired session. Please log in again.")
+        return user_resp.user.id
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Authentication verification failed: {str(e)}")
+
 
 @app.get("/")
 @app.get("/api/v1/health")
@@ -68,7 +95,7 @@ def extract_party_name(narration: str) -> str:
         return m.group(1).replace('-', ' ').strip()
         
     # ACH / NACH format
-    m = re.match(r'(?:ACH|NACH)(?:D|CR|DR)?-([A-Za-z0-9\s\.\&]+?)(?:-[0-9]+|\/|$)', narration)
+    m = re.match(r'(?:ACH|NACH)(?:D|CR|DR)?-([A-Za-z0-9\s\.&]+?)(?:-[0-9]+|\/|$)', narration)
     if m:
         return m.group(1).replace('-', ' ').strip()
         
@@ -357,7 +384,15 @@ def ensure_local_pdf(file_path: str) -> str:
 
 @app.post("/api/v1/upload")
 @app.post("/upload")
-async def upload_statement(file: UploadFile = File(...), password: Optional[str] = Form(None)):
+async def upload_statement(
+    file: UploadFile = File(...),
+    password: Optional[str] = Form(None),
+    authorization: Optional[str] = Header(None),
+    token: Optional[str] = Query(None)
+):
+    # Require authenticated user
+    user_id = get_user_id(authorization, token)
+
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
         
@@ -403,7 +438,7 @@ async def upload_statement(file: UploadFile = File(...), password: Optional[str]
     first_date = min(dates)
     last_date = max(dates)
     
-    # 1. Insert Document metadata
+    # 1. Insert Document metadata with user_id
     doc_data = {
         'file_name': file.filename,
         'bank_name': parsed.get('bank_name', 'Bank Statement'),
@@ -411,9 +446,11 @@ async def upload_statement(file: UploadFile = File(...), password: Optional[str]
         'first_transaction_date': first_date,
         'last_transaction_date': last_date,
         'total_transactions': len(transactions),
-        'processing_status': 'COMPLETED'
+        'processing_status': 'COMPLETED',
+        'user_id': user_id
     }
     
+    # Use service_role client with explicit user_id
     doc_res = supabase.table('documents').insert(doc_data).execute()
     if not doc_res.data:
         raise HTTPException(status_code=500, detail="Failed to save document record.")
@@ -431,12 +468,13 @@ async def upload_statement(file: UploadFile = File(...), password: Optional[str]
     except Exception as st_err:
         print("Notice: Cloud storage upload skipped:", st_err)
     
-    # 2. Insert Transactions with duplicate detection
+    # 2. Insert Transactions with user_id and duplicate detection
     added = 0
     duplicates = 0
     
     for txn in transactions:
         txn['source_document_id'] = doc_id
+        txn['user_id'] = user_id
         try:
             supabase.table('transactions').insert(txn).execute()
             added += 1
@@ -445,7 +483,6 @@ async def upload_statement(file: UploadFile = File(...), password: Optional[str]
             if 'duplicate key' in err_msg or 'unique constraint' in err_msg:
                 duplicates += 1
             else:
-                # Log any unexpected insert issue
                 print("Insert error:", err_msg)
                 
     return {
@@ -462,26 +499,29 @@ async def upload_statement(file: UploadFile = File(...), password: Optional[str]
 
 @app.get("/api/v1/transactions")
 @app.get("/transactions")
-async def get_transactions():
+async def get_transactions(authorization: Optional[str] = Header(None), token: Optional[str] = Query(None)):
+    user_id = get_user_id(authorization, token)
     try:
-        res = supabase.table('transactions').select('*').order('transaction_date', desc=True).execute()
+        res = supabase.table('transactions').select('*').eq('user_id', user_id).order('transaction_date', desc=True).execute()
         return res.data or []
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/documents")
 @app.get("/documents")
-async def get_documents():
+async def get_documents(authorization: Optional[str] = Header(None), token: Optional[str] = Query(None)):
+    user_id = get_user_id(authorization, token)
     try:
-        res = supabase.table('documents').select('*').order('upload_date', desc=True).execute()
+        res = supabase.table('documents').select('*').eq('user_id', user_id).order('upload_date', desc=True).execute()
         return res.data or []
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/documents/{document_id}/info")
 @app.get("/documents/{document_id}/info")
-async def get_document_info(document_id: str):
-    res = supabase.table('documents').select('*').eq('document_id', document_id).execute()
+async def get_document_info(document_id: str, authorization: Optional[str] = Header(None), token: Optional[str] = Query(None)):
+    user_id = get_user_id(authorization, token)
+    res = supabase.table('documents').select('*').eq('document_id', document_id).eq('user_id', user_id).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Document not found")
         
@@ -504,8 +544,9 @@ async def get_document_info(document_id: str):
 
 @app.get("/api/v1/documents/{document_id}/pdf")
 @app.get("/documents/{document_id}/pdf")
-async def get_document_pdf(document_id: str):
-    res = supabase.table('documents').select('*').eq('document_id', document_id).execute()
+async def get_document_pdf(document_id: str, authorization: Optional[str] = Header(None), token: Optional[str] = Query(None)):
+    user_id = get_user_id(authorization, token)
+    res = supabase.table('documents').select('*').eq('document_id', document_id).eq('user_id', user_id).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Document not found")
         
@@ -527,8 +568,9 @@ async def get_document_pdf(document_id: str):
 
 @app.get("/api/v1/documents/{document_id}/page/{page_num}")
 @app.get("/documents/{document_id}/page/{page_num}")
-async def get_document_page(document_id: str, page_num: int):
-    res = supabase.table('documents').select('*').eq('document_id', document_id).execute()
+async def get_document_page(document_id: str, page_num: int, authorization: Optional[str] = Header(None), token: Optional[str] = Query(None)):
+    user_id = get_user_id(authorization, token)
+    res = supabase.table('documents').select('*').eq('document_id', document_id).eq('user_id', user_id).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Document not found")
         
@@ -564,21 +606,25 @@ async def get_document_page(document_id: str, page_num: int):
             doc.close()
     except HTTPException:
         raise
+
 @app.delete("/api/v1/documents/{document_id}")
 @app.delete("/documents/{document_id}")
-async def delete_document(document_id: str):
-    res = supabase.table('documents').select('*').eq('document_id', document_id).execute()
+async def delete_document(document_id: str, authorization: Optional[str] = Header(None), token: Optional[str] = Query(None)):
+    user_id = get_user_id(authorization, token)
+
+    # Verify ownership before deleting
+    res = supabase.table('documents').select('*').eq('document_id', document_id).eq('user_id', user_id).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Document not found")
         
     file_path = res.data[0].get('file_location')
     
     try:
-        # Delete transactions associated with this document
-        supabase.table('transactions').delete().eq('source_document_id', document_id).execute()
+        # Delete transactions (user_id filter enforces scoping)
+        supabase.table('transactions').delete().eq('source_document_id', document_id).eq('user_id', user_id).execute()
         
         # Delete document record
-        supabase.table('documents').delete().eq('document_id', document_id).execute()
+        supabase.table('documents').delete().eq('document_id', document_id).eq('user_id', user_id).execute()
         
         # Remove file from disk
         if file_path and os.path.exists(file_path):
@@ -602,4 +648,3 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
-

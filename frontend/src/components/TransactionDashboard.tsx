@@ -87,7 +87,7 @@ const getApiBase = () => {
 };
 
 export default function TransactionDashboard() {
-  const { user, signOut } = useAuth();
+  const { user, session, signOut } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -156,7 +156,8 @@ export default function TransactionDashboard() {
     const fetchDocInfo = async () => {
       try {
         const api = getApiBase();
-        const res = await axios.get(`${api}/api/v1/documents/${previewDocId}/info`);
+        const authHeaders = await getAuthHeaders();
+        const res = await axios.get(`${api}/api/v1/documents/${previewDocId}/info`, { headers: authHeaders });
         if (res.data?.total_pages) {
           setPreviewTotalPages(res.data.total_pages);
         }
@@ -167,14 +168,25 @@ export default function TransactionDashboard() {
     fetchDocInfo();
   }, [previewDocId]);
 
-  // Fetch data
+  // Get session access token for authenticated backend calls
+  const getAuthHeaders = async (): Promise<Record<string, string>> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      return { Authorization: `Bearer ${session.access_token}` };
+    }
+    return {};
+  };
+
+  // Fetch data — scoped to the current authenticated user
   const fetchData = async () => {
     setLoading(true);
     try {
       const api = getApiBase();
+      const authHeaders = await getAuthHeaders();
+
       const [txRes, docRes] = await Promise.all([
-        axios.get(`${api}/api/v1/transactions`),
-        axios.get(`${api}/api/v1/documents`)
+        axios.get(`${api}/api/v1/transactions`, { headers: authHeaders }),
+        axios.get(`${api}/api/v1/documents`, { headers: authHeaders })
       ]);
 
       if (!Array.isArray(txRes.data) || !Array.isArray(docRes.data)) {
@@ -186,6 +198,7 @@ export default function TransactionDashboard() {
     } catch (err: any) {
       console.error("Backend fetch error, falling back to Supabase client:", err);
       try {
+        // Supabase anon client automatically scopes by auth.uid() via RLS
         const { data: txns, error: txError } = await supabase
           .from('transactions')
           .select('*')
@@ -215,9 +228,26 @@ export default function TransactionDashboard() {
     }
   };
 
+  // Re-fetch and clear state whenever the authenticated user changes
   useEffect(() => {
-    fetchData();
-  }, []);
+    // Clear all previous user's data immediately to prevent leaking state
+    setTransactions([]);
+    setDocuments([]);
+    setUploadResult(null);
+    setSelectedDocId('ALL');
+    setSelectedYear('ALL');
+    setSelectedMonth('ALL');
+    setSelectedBank('ALL');
+    setSelectedType('ALL');
+    setGlobalSearch('');
+    setPreviewDocId(null);
+
+    if (user) {
+      fetchData();
+    } else {
+      setLoading(false);
+    }
+  }, [user?.id]);
 
   // Upload handler
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -230,15 +260,16 @@ export default function TransactionDashboard() {
       formData.append('file', file);
 
       try {
+        const authHeaders = await getAuthHeaders();
         let response;
         try {
           response = await axios.post(`${getApiBase()}/api/v1/upload`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
+            headers: { 'Content-Type': 'multipart/form-data', ...authHeaders }
           });
         } catch (apiErr: any) {
           if (apiErr.response?.status === 404) {
             response = await axios.post(`${getApiBase()}/upload`, formData, {
-              headers: { 'Content-Type': 'multipart/form-data' }
+              headers: { 'Content-Type': 'multipart/form-data', ...authHeaders }
             });
           } else {
             throw apiErr;
@@ -287,15 +318,16 @@ export default function TransactionDashboard() {
     formData.append('password', statementPassword.trim());
 
     try {
+      const authHeaders = await getAuthHeaders();
       let response;
       try {
         response = await axios.post(`${getApiBase()}/api/v1/upload`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
+          headers: { 'Content-Type': 'multipart/form-data', ...authHeaders }
         });
       } catch (apiErr: any) {
         if (apiErr.response?.status === 404) {
           response = await axios.post(`${getApiBase()}/upload`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
+            headers: { 'Content-Type': 'multipart/form-data', ...authHeaders }
           });
         } else {
           throw apiErr;
@@ -346,7 +378,8 @@ export default function TransactionDashboard() {
 
     setDeletingDocId(docId);
     try {
-      await axios.delete(`${getApiBase()}/api/v1/documents/${docId}`);
+      const authHeaders = await getAuthHeaders();
+      await axios.delete(`${getApiBase()}/api/v1/documents/${docId}`, { headers: authHeaders });
       setToastMessage({
         text: `Successfully deleted "${fileName}" and associated transactions.`,
         type: 'success'
@@ -1513,7 +1546,7 @@ export default function TransactionDashboard() {
 
                 {/* Download PDF Button */}
                 <a
-                  href={`${getApiBase()}/api/v1/documents/${previewDocId}/pdf`}
+                  href={`${getApiBase()}/api/v1/documents/${previewDocId}/pdf?token=${encodeURIComponent(session?.access_token || '')}`}
                   download
                   className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
                   title="Download full PDF"
@@ -1523,7 +1556,7 @@ export default function TransactionDashboard() {
 
                 {/* Open in New Tab */}
                 <a
-                  href={`${getApiBase()}/api/v1/documents/${previewDocId}/pdf`}
+                  href={`${getApiBase()}/api/v1/documents/${previewDocId}/pdf?token=${encodeURIComponent(session?.access_token || '')}`}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
@@ -1548,7 +1581,7 @@ export default function TransactionDashboard() {
               <div className="flex-1 bg-slate-950 overflow-auto flex items-center justify-center p-4">
                 <div className="overflow-auto max-h-full max-w-full flex items-center justify-center">
                   <img
-                    src={`${getApiBase()}/api/v1/documents/${previewDocId}/page/${previewPage}`}
+                    src={`${getApiBase()}/api/v1/documents/${previewDocId}/page/${previewPage}?token=${encodeURIComponent(session?.access_token || '')}`}
                     alt={`Statement Page ${previewPage}`}
                     style={{ width: `${imageZoom}%`, maxWidth: 'none' }}
                     className="rounded shadow-2xl transition-all duration-200 object-contain bg-white"
@@ -1559,13 +1592,13 @@ export default function TransactionDashboard() {
               <div className="flex-1 w-full h-full min-h-0 bg-slate-100 relative">
                 <object
                   key={`${previewDocId}-${previewPage}`}
-                  data={`${getApiBase()}/api/v1/documents/${previewDocId}/pdf#page=${previewPage}&zoom=page-fit`}
+                  data={`${getApiBase()}/api/v1/documents/${previewDocId}/pdf?token=${encodeURIComponent(session?.access_token || '')}#page=${previewPage}&zoom=page-fit`}
                   type="application/pdf"
                   className="w-full h-full border-none"
                 >
                   <iframe
                     key={`iframe-${previewDocId}-${previewPage}`}
-                    src={`${getApiBase()}/api/v1/documents/${previewDocId}/pdf#page=${previewPage}&zoom=page-fit`}
+                    src={`${getApiBase()}/api/v1/documents/${previewDocId}/pdf?token=${encodeURIComponent(session?.access_token || '')}#page=${previewPage}&zoom=page-fit`}
                     className="w-full h-full border-none"
                     title="Statement PDF Viewer"
                   >
@@ -1583,7 +1616,7 @@ export default function TransactionDashboard() {
                           Switch to High-Res Page
                         </button>
                         <a
-                          href={`/api/v1/documents/${previewDocId}/pdf`}
+                          href={`${getApiBase()}/api/v1/documents/${previewDocId}/pdf?token=${encodeURIComponent(session?.access_token || '')}`}
                           target="_blank"
                           rel="noreferrer"
                           className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-xs font-semibold"

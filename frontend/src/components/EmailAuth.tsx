@@ -12,34 +12,29 @@ import {
   RefreshCw, 
   ShieldCheck, 
   AlertCircle, 
-  CheckCircle2, 
-  Send,
-  Smartphone
+  CheckCircle2
 } from 'lucide-react';
 
 export default function EmailAuth() {
-  const [authMode, setAuthMode] = useState<'password' | 'magiclink'>('password');
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [magicLinkSent, setMagicLinkSent] = useState(false);
 
-  // Validate Email
   const validateEmail = (val: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!val.trim() || !emailRegex.test(val.trim())) {
-      setError('Please enter a valid email address (e.g. name@example.com).');
+      setError('Please enter a valid email address.');
       return false;
     }
     return true;
   };
 
-  // 1. Password Login / Sign-up (Instant - Works 100% on Mobile APK & Web)
-  const handlePasswordAuth = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
@@ -52,72 +47,71 @@ export default function EmailAuth() {
       return;
     }
 
+    if (isSignUp && password !== confirmPassword) {
+      setError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
     setLoading(true);
     try {
       if (isSignUp) {
-        // Sign Up
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: cleanEmail,
           password: password,
         });
 
-        if (signUpError) throw signUpError;
+        if (signUpError) {
+          if (signUpError.message.includes('already registered') || signUpError.message.includes('already been registered')) {
+            setError('This email is already registered. Please sign in instead.');
+          } else {
+            throw signUpError;
+          }
+          return;
+        }
 
         if (data.session) {
-          setSuccessMessage('Account created! Logging in...');
+          // Auto-logged in (email confirmation disabled)
+          setSuccessMessage('Account created! Loading your dashboard...');
         } else {
-          setSuccessMessage('Account created! Please verify your email or sign in.');
+          // Email confirmation required
+          setSuccessMessage('Account created! Please check your email to verify your address, then sign in.');
           setIsSignUp(false);
+          setPassword('');
+          setConfirmPassword('');
         }
       } else {
-        // Sign In
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email: cleanEmail,
           password: password,
         });
 
-        if (signInError) throw signInError;
+        if (signInError) {
+          if (signInError.message.includes('Invalid login credentials') || signInError.message.includes('invalid_credentials')) {
+            setError('Incorrect email or password. Please try again.');
+          } else if (signInError.message.includes('Email not confirmed')) {
+            setError('Please verify your email address first. Check your inbox for the confirmation email.');
+          } else {
+            throw signInError;
+          }
+          return;
+        }
 
-        setSuccessMessage('Logged in successfully! Loading dashboard...');
+        setSuccessMessage('Signed in! Loading your dashboard...');
       }
     } catch (err: any) {
-      console.error('Password auth error:', err);
-      setError(err.message || 'Authentication failed. Please check your credentials.');
+      console.error('Auth error:', err);
+      setError(err.message || 'Authentication failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // 2. Magic Link Login (Optional for Web users)
-  const handleMagicLink = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const switchMode = () => {
+    setIsSignUp(!isSignUp);
     setError(null);
     setSuccessMessage(null);
-
-    const cleanEmail = email.trim().toLowerCase();
-    if (!validateEmail(cleanEmail)) return;
-
-    setLoading(true);
-    try {
-      const redirectUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
-
-      const { error: magicError } = await supabase.auth.signInWithOtp({
-        email: cleanEmail,
-        options: {
-          emailRedirectTo: redirectUrl,
-        },
-      });
-
-      if (magicError) throw magicError;
-
-      setMagicLinkSent(true);
-      setSuccessMessage(`Magic login link sent to ${cleanEmail}! Please check your email inbox or spam folder.`);
-    } catch (err: any) {
-      console.error('Magic link error:', err);
-      setError(err.message || 'Failed to send Magic Link.');
-    } finally {
-      setLoading(false);
-    }
+    setPassword('');
+    setConfirmPassword('');
   };
 
   return (
@@ -131,35 +125,33 @@ export default function EmailAuth() {
           </div>
           <h1 className="text-2xl font-black tracking-tight text-slate-900">BankAnalyzer</h1>
           <p className="text-xs text-slate-500 font-medium">
-            Mobile & Web Banking Analytics Portal
+            Secure Personal Banking Analytics
           </p>
         </div>
 
-        {/* Mode Toggle (Password vs Magic Link) */}
+        {/* Mode Tabs */}
         <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600">
           <button
             type="button"
-            onClick={() => { setAuthMode('password'); setError(null); }}
-            className={`flex-1 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              authMode === 'password' 
-                ? 'bg-white text-blue-600 shadow-xs' 
+            onClick={() => !isSignUp || switchMode()}
+            className={`flex-1 py-2 rounded-lg transition-all cursor-pointer ${
+              !isSignUp
+                ? 'bg-white text-blue-600 shadow-sm'
                 : 'hover:text-slate-900'
             }`}
           >
-            <Smartphone className="w-3.5 h-3.5" />
-            <span>Password (Mobile & Web)</span>
+            Sign In
           </button>
           <button
             type="button"
-            onClick={() => { setAuthMode('magiclink'); setError(null); }}
-            className={`flex-1 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              authMode === 'magiclink' 
-                ? 'bg-white text-blue-600 shadow-xs' 
+            onClick={() => isSignUp || switchMode()}
+            className={`flex-1 py-2 rounded-lg transition-all cursor-pointer ${
+              isSignUp
+                ? 'bg-white text-blue-600 shadow-sm'
                 : 'hover:text-slate-900'
             }`}
           >
-            <Send className="w-3.5 h-3.5" />
-            <span>Magic Link</span>
+            Create Account
           </button>
         </div>
 
@@ -178,136 +170,104 @@ export default function EmailAuth() {
           </div>
         )}
 
-        {/* 1. PASSWORD SIGN-IN / SIGN-UP FORM (IDEAL FOR MOBILE APK) */}
-        {authMode === 'password' && (
-          <form onSubmit={handlePasswordAuth} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                <Mail className="w-3.5 h-3.5 text-blue-600" />
-                <span>Email Address</span>
-              </label>
+        {/* Auth Form */}
+        <form onSubmit={handleAuth} className="space-y-4">
+          {/* Email */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+              <Mail className="w-3.5 h-3.5 text-blue-600" />
+              <span>Email Address</span>
+            </label>
+            <input
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+              autoFocus
+              required
+            />
+          </div>
+
+          {/* Password */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5 text-blue-600" />
+              <span>Password</span>
+            </label>
+            <div className="relative">
               <input
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
-                autoFocus
+                type={showPassword ? 'text' : 'password'}
+                placeholder={isSignUp ? 'Create a strong password (min 6 chars)' : '••••••••'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 pr-10 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                 required
               />
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Password</span>
-                </label>
-              </div>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 pr-10 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading || !email.trim() || !password}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm rounded-xl shadow-md transition-all disabled:opacity-50 cursor-pointer"
-            >
-              {loading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Authenticating...</span>
-                </>
-              ) : (
-                <>
-                  <span>{isSignUp ? 'Create Account' : 'Sign In'}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-
-            {/* Toggle Sign In vs Sign Up */}
-            <div className="text-center pt-1">
               <button
                 type="button"
-                onClick={() => { setIsSignUp(!isSignUp); setError(null); }}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-800 cursor-pointer"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
               >
-                {isSignUp 
-                  ? 'Already have an account? Sign In' 
-                  : "Don't have an account? Sign Up"}
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-          </form>
-        )}
+          </div>
 
-        {/* 2. MAGIC LINK FORM */}
-        {authMode === 'magiclink' && (
-          <form onSubmit={handleMagicLink} className="space-y-4">
+          {/* Confirm Password (Sign Up only) */}
+          {isSignUp && (
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                <Mail className="w-3.5 h-3.5 text-blue-600" />
-                <span>Email Address</span>
+                <Lock className="w-3.5 h-3.5 text-blue-600" />
+                <span>Confirm Password</span>
               </label>
               <input
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Re-enter your password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
-                autoFocus
                 required
               />
-              <p className="text-[11px] text-slate-500">
-                We'll email you a 1-click Magic Link to log in without a password.
-              </p>
             </div>
+          )}
 
-            <button
-              type="submit"
-              disabled={loading || !email.trim()}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-md transition-all disabled:opacity-50 cursor-pointer"
-            >
-              {loading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Sending Link...</span>
-                </>
-              ) : (
-                <>
-                  <span>Send Magic Link</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-
-            {magicLinkSent && (
-              <p className="text-[11px] text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-center">
-                👉 <b>Mobile Note:</b> If using the mobile APK, please use the <b>Password</b> tab for instant in-app sign in!
-              </p>
+          <button
+            type="submit"
+            disabled={loading || !email.trim() || !password || (isSignUp && !confirmPassword)}
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm rounded-xl shadow-md transition-all disabled:opacity-50 cursor-pointer"
+          >
+            {loading ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>{isSignUp ? 'Creating Account...' : 'Signing In...'}</span>
+              </>
+            ) : (
+              <>
+                <span>{isSignUp ? 'Create Account' : 'Sign In'}</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
             )}
-          </form>
-        )}
+          </button>
+
+          {/* Toggle */}
+          <div className="text-center pt-1">
+            <button
+              type="button"
+              onClick={switchMode}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-800 cursor-pointer"
+            >
+              {isSignUp
+                ? 'Already have an account? Sign In'
+                : "Don't have an account? Create one"}
+            </button>
+          </div>
+        </form>
 
         {/* Security Badge */}
         <div className="pt-2 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[11px] text-slate-400 font-medium">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-          <span>Encrypted Session • Supabase Auth</span>
+          <span>Your data is private and isolated · Supabase Auth</span>
         </div>
       </div>
     </div>
