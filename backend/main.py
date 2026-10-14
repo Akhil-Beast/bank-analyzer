@@ -2,6 +2,7 @@ import os
 import uuid
 import datetime
 import re
+import hashlib
 from typing import Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -439,6 +440,22 @@ async def upload_statement(
     file_path = os.path.join(UPLOAD_DIR, saved_filename)
     
     content = await file.read()
+    file_hash = hashlib.sha256(content).hexdigest()
+    
+    # 0. Check for duplicate upload by exact file content hash
+    try:
+        dup_file = supabase.table('documents').select('file_name').eq('user_id', user_id).eq('file_hash', file_hash).execute()
+        if dup_file.data:
+            existing_name = dup_file.data[0].get('file_name', 'an existing statement')
+            raise HTTPException(
+                status_code=400, 
+                detail=f"This statement has already been uploaded (as '{existing_name}'). Duplicate uploads of identical files are not allowed."
+            )
+    except HTTPException:
+        raise
+    except Exception as hash_check_err:
+        print("Notice: Error checking duplicate file_hash:", hash_check_err)
+
     with open(file_path, "wb") as f:
         f.write(content)
         
@@ -473,11 +490,32 @@ async def upload_statement(
             os.remove(file_path)
         raise HTTPException(status_code=400, detail="Could not identify valid transactions in this document.")
         
+    # 0.1 Semantic / Content Signature Check: detect identical statements even if re-saved, unlocked, or renamed
+    sig_elements = sorted([
+        f"{t.get('transaction_date')}|{t.get('amount')}|{t.get('balance')}|{t.get('transaction_id')}|{t.get('description', '')[:40]}"
+        for t in transactions
+    ])
+    content_hash = hashlib.sha256(";;".join(sig_elements).encode('utf-8')).hexdigest()
+    try:
+        dup_content = supabase.table('documents').select('file_name').eq('user_id', user_id).eq('content_hash', content_hash).execute()
+        if dup_content.data:
+            existing_name = dup_content.data[0].get('file_name', 'an existing statement')
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            raise HTTPException(
+                status_code=400,
+                detail=f"This statement has already been uploaded (as '{existing_name}'). Identical statement transactions were detected, so duplicate upload was rejected."
+            )
+    except HTTPException:
+        raise
+    except Exception as content_check_err:
+        print("Notice: Error checking duplicate content_hash:", content_check_err)
+
     dates = [t['transaction_date'] for t in transactions]
     first_date = min(dates)
     last_date = max(dates)
     
-    # 1. Insert Document metadata with user_id
+    # 1. Insert Document metadata with user_id, file_hash, and content_hash
     doc_data = {
         'file_name': file.filename,
         'bank_name': parsed.get('bank_name', 'Bank Statement'),
@@ -486,7 +524,9 @@ async def upload_statement(
         'last_transaction_date': last_date,
         'total_transactions': len(transactions),
         'processing_status': 'COMPLETED',
-        'user_id': user_id
+        'user_id': user_id,
+        'file_hash': file_hash,
+        'content_hash': content_hash
     }
     
     # Insert with service_role client; fallback to user_client if needed
@@ -556,7 +596,9 @@ async def upload_statement(
         "account_no": parsed.get('account_no'),
         "first_transaction_date": first_date,
         "last_transaction_date": last_date,
-        "total_transactions": len(transactions)
+        "total_transactions": len(transactions),
+        "file_hash": file_hash,
+        "content_hash": content_hash
     }
 
 @app.get("/api/v1/transactions")

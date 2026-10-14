@@ -51,8 +51,24 @@ export type DocumentSummary = {
   last_transaction_date: string;
   total_transactions: number;
   upload_date?: string;
+  file_hash?: string;
+  content_hash?: string;
   added?: number;
   duplicates_skipped?: number;
+};
+
+// Compute SHA-256 hash of file content in browser before upload
+const computeFileSha256 = async (file: File): Promise<string> => {
+  try {
+    const buffer = await file.arrayBuffer();
+    const digest = await crypto.subtle.digest('SHA-256', buffer);
+    return Array.from(new Uint8Array(digest))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+  } catch (err) {
+    console.warn("Could not calculate SHA-256 hash:", err);
+    return '';
+  }
 };
 
 const MONTH_NAMES = [
@@ -178,8 +194,8 @@ export default function TransactionDashboard() {
   };
 
   // Fetch data — scoped to the current authenticated user
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (showLoading: boolean = true) => {
+    if (showLoading) setLoading(true);
     try {
       const api = getApiBase();
       const authHeaders = await getAuthHeaders();
@@ -204,10 +220,8 @@ export default function TransactionDashboard() {
           .select('*')
           .order('transaction_date', { ascending: false });
 
-        if (!txError && Array.isArray(txns)) {
+        if (!txError && Array.isArray(txns) && txns.length > 0) {
           setTransactions(txns);
-        } else {
-          setTransactions([]);
         }
 
         const { data: docs, error: docError } = await supabase
@@ -215,16 +229,16 @@ export default function TransactionDashboard() {
           .select('*')
           .order('upload_date', { ascending: false });
 
-        if (!docError && Array.isArray(docs)) {
+        if (!docError && Array.isArray(docs) && docs.length > 0) {
           setDocuments(docs);
-        } else {
-          setDocuments([]);
         }
       } catch (innerErr) {
-        setToastMessage({ text: "Failed to connect to backend server or database", type: 'error' });
+        if (showLoading) {
+          setToastMessage({ text: "Failed to connect to backend server or database", type: 'error' });
+        }
       }
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -256,8 +270,24 @@ export default function TransactionDashboard() {
     setToastMessage(null);
 
     for (const file of acceptedFiles) {
+      // 1. Analyze and hash file content before uploading to reject duplicates upfront
+      const fileHash = await computeFileSha256(file);
+      if (fileHash) {
+        const existingDoc = documents.find(d => d.file_hash === fileHash);
+        if (existingDoc) {
+          setToastMessage({
+            text: `Duplicate file rejected: "${file.name}" has identical content to "${existingDoc.file_name}" already in your account.`,
+            type: 'error'
+          });
+          continue;
+        }
+      }
+
       const formData = new FormData();
       formData.append('file', file);
+      if (fileHash) {
+        formData.append('file_hash', fileHash);
+      }
 
       try {
         const authHeaders = await getAuthHeaders();
@@ -291,6 +321,8 @@ export default function TransactionDashboard() {
           first_transaction_date: resData.first_transaction_date,
           last_transaction_date: resData.last_transaction_date,
           total_transactions: resData.total_transactions,
+          file_hash: resData.file_hash,
+          content_hash: resData.content_hash,
           added: resData.added,
           duplicates_skipped: resData.duplicates_skipped
         });
@@ -309,7 +341,7 @@ export default function TransactionDashboard() {
     }
     setDropzoneKey(prev => prev + 1);
     setUploading(false);
-  }, []);
+  }, [documents]);
 
   // Unlock and upload handler
   const handleUnlockAndUpload = async (e?: React.FormEvent) => {
@@ -319,9 +351,23 @@ export default function TransactionDashboard() {
     setUnlocking(true);
     setPasswordError(null);
 
+    // Analyze and hash file content before unlocking/uploading
+    const fileHash = await computeFileSha256(pendingPasswordFile);
+    if (fileHash) {
+      const existingDoc = documents.find(d => d.file_hash === fileHash);
+      if (existingDoc) {
+        setPasswordError(`This statement was already uploaded as "${existingDoc.file_name}". Duplicate upload rejected.`);
+        setUnlocking(false);
+        return;
+      }
+    }
+
     const formData = new FormData();
     formData.append('file', pendingPasswordFile);
     formData.append('password', statementPassword.trim());
+    if (fileHash) {
+      formData.append('file_hash', fileHash);
+    }
 
     try {
       const authHeaders = await getAuthHeaders();
@@ -354,6 +400,8 @@ export default function TransactionDashboard() {
         first_transaction_date: resData.first_transaction_date,
         last_transaction_date: resData.last_transaction_date,
         total_transactions: resData.total_transactions,
+        file_hash: resData.file_hash,
+        content_hash: resData.content_hash,
         added: resData.added,
         duplicates_skipped: resData.duplicates_skipped
       });
@@ -382,8 +430,9 @@ export default function TransactionDashboard() {
     accept: { 'application/pdf': ['.pdf'] }
   });
 
-  // Remove / Delete uploaded PDF Document (Optimistic UI for 0ms instant feedback)
+  // Remove / Delete uploaded PDF Document (Optimistic UI with Background Sync)
   const handleRemoveDocument = async (docId: string, fileName: string) => {
+    if (!docId) return;
     if (!window.confirm(`Are you sure you want to remove "${fileName}"?\nThis will permanently delete the document and all its extracted transactions.`)) {
       return;
     }
@@ -393,8 +442,8 @@ export default function TransactionDashboard() {
     const prevTxns = [...transactions];
 
     // Optimistically remove from state immediately (0ms visual delay)
-    setDocuments(prev => prev.filter(d => d.document_id !== docId));
-    setTransactions(prev => prev.filter(t => t.source_document_id !== docId));
+    setDocuments(prev => prev.filter(d => d.document_id && d.document_id !== docId));
+    setTransactions(prev => prev.filter(t => t.source_document_id && t.source_document_id !== docId));
     if (selectedDocId === docId) {
       setSelectedDocId('ALL');
     }
@@ -413,6 +462,8 @@ export default function TransactionDashboard() {
         text: `Successfully deleted "${fileName}" and associated transactions.`,
         type: 'success'
       });
+      // Silently sync with server to ensure remaining state is exact
+      fetchData(false);
     } catch (err: any) {
       // Rollback to previous state on failure
       setDocuments(prevDocs);
