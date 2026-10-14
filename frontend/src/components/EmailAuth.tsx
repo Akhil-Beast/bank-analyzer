@@ -55,9 +55,13 @@ export default function EmailAuth() {
     setLoading(true);
     try {
       if (isSignUp) {
+        const redirectUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: cleanEmail,
           password: password,
+          options: {
+            emailRedirectTo: redirectUrl,
+          },
         });
 
         if (signUpError) {
@@ -70,14 +74,21 @@ export default function EmailAuth() {
         }
 
         if (data.session) {
-          // Auto-logged in (email confirmation disabled)
+          // Auto-logged in immediately
           setSuccessMessage('Account created! Loading your dashboard...');
-        } else {
-          // Email confirmation required
-          setSuccessMessage('Account created! Please check your email to verify your address, then sign in.');
-          setIsSignUp(false);
-          setPassword('');
-          setConfirmPassword('');
+        } else if (data.user) {
+          // Attempt immediate password sign in to verify session
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password: password,
+          });
+
+          if (!signInError && signInData.session) {
+            setSuccessMessage('Account created! Loading your dashboard...');
+          } else {
+            setSuccessMessage('Account created! Please sign in with your password.');
+            setIsSignUp(false);
+          }
         }
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({

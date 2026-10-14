@@ -73,6 +73,21 @@ BEGIN
   END IF;
 END $$;
 
--- STEP 9: Verify RLS is enabled
+-- STEP 9: Auto-confirm users on signup (prevents broken email links & rate limits)
+CREATE OR REPLACE FUNCTION public.auto_confirm_user()
+RETURNS trigger AS $$
+BEGIN
+  NEW.email_confirmed_at = NOW();
+  NEW.confirmed_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  BEFORE INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.auto_confirm_user();
+
+-- STEP 10: Verify RLS is enabled
 SELECT tablename, rowsecurity FROM pg_tables
   WHERE tablename IN ('documents', 'transactions');

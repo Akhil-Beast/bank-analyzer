@@ -24,9 +24,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    // 1. Get initial session on app load
+    // 1. Get initial session on app load, handling any email verification / PKCE auth code in the URL
     const initializeAuth = async () => {
       try {
+        if (typeof window !== 'undefined') {
+          const urlParams = new URLSearchParams(window.location.search);
+          const code = urlParams.get('code');
+          if (code) {
+            try {
+              const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+              if (!exchangeError && data.session) {
+                setSession(data.session);
+                setUser(data.session.user);
+                // Clean the code parameter from the browser URL without full reload
+                const cleanUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, cleanUrl);
+                setLoading(false);
+                return;
+              }
+            } catch (exchangeErr) {
+              console.warn("PKCE auth code exchange error:", exchangeErr);
+            }
+          }
+        }
+
         const { data: { session: initialSession }, error } = await supabase.auth.getSession();
         if (error) {
           console.error("Error retrieving Supabase session:", error);
