@@ -6,10 +6,17 @@ import {
   Filter, RefreshCw, X, Eye, EyeOff, FileSpreadsheet, Trash2,
   CheckCircle2, AlertCircle, Building2, ChevronLeft, ChevronRight,
   SlidersHorizontal, ExternalLink, ZoomIn, ZoomOut, Layers, Lock, KeyRound, Download,
-  LogOut, User as UserIcon
+  LogOut, User as UserIcon, Fingerprint, Shield
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { 
+  checkBiometricAvailability, 
+  getBiometricProfile, 
+  registerBiometrics, 
+  clearBiometricProfile,
+  BiometricProfile
+} from '@/lib/biometrics';
 import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
 import {
@@ -120,6 +127,15 @@ export default function TransactionDashboard() {
   const [unlocking, setUnlocking] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Biometric Management State
+  const [biometricProfile, setBiometricProfile] = useState<BiometricProfile | null>(null);
+  const [biometricSupported, setBiometricSupported] = useState<boolean>(false);
+  const [showBiometricModal, setShowBiometricModal] = useState<boolean>(false);
+  const [bioPasswordInput, setBioPasswordInput] = useState<string>('');
+  const [bioModalError, setBioModalError] = useState<string | null>(null);
+  const [bioModalLoading, setBioModalLoading] = useState<boolean>(false);
+  const [showBioPassword, setShowBioPassword] = useState<boolean>(false);
+
   // Filter Panel Slide State & Active Tab with LocalStorage Persistence
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -183,6 +199,72 @@ export default function TransactionDashboard() {
     };
     fetchDocInfo();
   }, [previewDocId]);
+
+  // Initialize biometric status on device
+  useEffect(() => {
+    let mounted = true;
+    const checkBio = async () => {
+      try {
+        const profile = getBiometricProfile();
+        const avail = await checkBiometricAvailability();
+        if (mounted) {
+          setBiometricProfile(profile);
+          setBiometricSupported(avail.supported);
+        }
+      } catch (e) {
+        console.warn("Could not check biometrics:", e);
+      }
+    };
+    checkBio();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const handleEnableBiometricsFromDashboard = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bioPasswordInput || bioPasswordInput.length < 6) {
+      setBioModalError('Please enter your valid password (min 6 characters).');
+      return;
+    }
+    setBioModalLoading(true);
+    setBioModalError(null);
+    try {
+      const email = user?.email;
+      if (!email) throw new Error('User email not found.');
+
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: bioPasswordInput,
+      });
+      if (verifyError) {
+        setBioModalError('Incorrect password. Please verify your password and try again.');
+        return;
+      }
+
+      const result = await registerBiometrics(email, bioPasswordInput);
+      if (result.success) {
+        const newProfile = getBiometricProfile();
+        setBiometricProfile(newProfile);
+        setShowBiometricModal(false);
+        setBioPasswordInput('');
+        setToastMessage({ text: 'Biometric sign-in successfully enabled on this device!', type: 'success' });
+      } else {
+        setBioModalError(result.error || 'Biometric registration cancelled or failed.');
+      }
+    } catch (err: any) {
+      setBioModalError(err.message || 'Failed to enable biometrics.');
+    } finally {
+      setBioModalLoading(false);
+    }
+  };
+
+  const handleRemoveBiometrics = () => {
+    clearBiometricProfile();
+    setBiometricProfile(null);
+    setShowBiometricModal(false);
+    setToastMessage({ text: 'Biometric sign-in removed from this device.', type: 'success' });
+  };
 
   // Get session access token for authenticated backend calls
   const getAuthHeaders = async (): Promise<Record<string, string>> => {
@@ -964,6 +1046,30 @@ export default function TransactionDashboard() {
                 <UserIcon className="w-3.5 h-3.5 text-blue-600" />
                 <span className="font-mono">{user.phone || user.email || 'User'}</span>
               </div>
+
+              {/* Biometrics Status / Manage Button */}
+              {biometricSupported && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBiometricModal(true);
+                    setBioModalError(null);
+                    setBioPasswordInput('');
+                  }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    biometricProfile
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+                      : 'bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100'
+                  }`}
+                  title={biometricProfile ? 'Biometric Sign-In is active on this device' : 'Click to enable fingerprint sign-in on this device'}
+                >
+                  <Fingerprint className={`w-3.5 h-3.5 ${biometricProfile ? 'text-emerald-600' : 'text-blue-600'}`} />
+                  <span className="hidden sm:inline">
+                    {biometricProfile ? 'Fingerprint Active' : 'Enable Fingerprint'}
+                  </span>
+                </button>
+              )}
+
               <button
                 onClick={signOut}
                 className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 border border-slate-200 hover:border-rose-200 rounded-lg text-xs font-bold text-slate-600 transition-colors cursor-pointer"
@@ -1792,6 +1898,131 @@ export default function TransactionDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Biometric Management Modal */}
+      {showBiometricModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in"
+          onClick={() => { setShowBiometricModal(false); setBioModalError(null); setBioPasswordInput(''); }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 max-w-md w-full space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-xl ${biometricProfile ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                  <Fingerprint className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">
+                    {biometricProfile ? 'Biometric Sign-In Active' : 'Enable Fingerprint Sign-In'}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {biometricProfile ? 'Device security management' : '1-touch sign-in on this device'}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setShowBiometricModal(false); setBioModalError(null); setBioPasswordInput(''); }}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {biometricProfile ? (
+              <div className="space-y-4 text-xs">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+                  <div className="flex items-center gap-2 text-slate-800 font-medium">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Fingerprint sign-in is currently active for:</span>
+                  </div>
+                  <div className="font-mono font-bold text-slate-900 pl-6">{biometricProfile.email}</div>
+                  <p className="text-[11px] text-slate-500 pl-6">
+                    Registered on: {new Date(biometricProfile.registeredAt).toLocaleDateString()}
+                  </p>
+                </div>
+
+                <p className="text-slate-600 text-xs">
+                  Whenever you open BankAnalyzer after exiting or closing your browser, you can log in immediately by touching the fingerprint sensor.
+                </p>
+
+                <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={handleRemoveBiometrics}
+                    className="flex-1 py-2 px-3 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg cursor-pointer transition-colors"
+                  >
+                    Remove from Device
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowBiometricModal(false)}
+                    className="flex-1 py-2 px-3 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleEnableBiometricsFromDashboard} className="space-y-4">
+                <p className="text-xs text-slate-600">
+                  Confirm your password once to register your fingerprint sensor for future 1-touch sign-ins on this device.
+                </p>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Confirm Account Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showBioPassword ? 'text' : 'password'}
+                      placeholder="Enter your password"
+                      value={bioPasswordInput}
+                      onChange={(e) => setBioPasswordInput(e.target.value)}
+                      autoFocus
+                      required
+                      className="w-full bg-slate-50 border border-slate-300 focus:border-blue-600 focus:bg-white rounded-lg px-3.5 py-2 text-sm outline-none pr-10 transition-all font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowBioPassword(p => !p)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      {showBioPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {bioModalError && (
+                    <p className="text-xs font-semibold text-rose-600 mt-2 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{bioModalError}</span>
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => { setShowBiometricModal(false); setBioModalError(null); setBioPasswordInput(''); }}
+                    className="flex-1 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!bioPasswordInput || bioModalLoading}
+                    className="flex-1 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                  >
+                    {bioModalLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Fingerprint className="w-4 h-4" />}
+                    <span>{bioModalLoading ? 'Verifying...' : 'Enable Fingerprint'}</span>
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
