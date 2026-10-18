@@ -137,19 +137,25 @@ export default function TransactionDashboard() {
   const [showBioPassword, setShowBioPassword] = useState<boolean>(false);
 
   // Filter Panel Slide State & Active Tab with LocalStorage Persistence
-  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('bankanalyzer_filter_open');
-      return saved !== null ? saved === 'true' : true;
-    }
-    return true;
-  });
+  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState<boolean>(false);
   const [sidebarTab, setSidebarTab] = useState<'filters' | 'documents'>('filters');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isDesktop = window.innerWidth >= 1024;
+      const saved = localStorage.getItem('bankanalyzer_filter_open');
+      if (saved !== null) {
+        setIsFilterPanelOpen(isDesktop ? saved === 'true' : false);
+      } else {
+        setIsFilterPanelOpen(isDesktop);
+      }
+    }
+  }, []);
 
   const toggleFilterPanel = () => {
     setIsFilterPanelOpen(prev => {
       const next = !prev;
-      if (typeof window !== 'undefined') {
+      if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
         localStorage.setItem('bankanalyzer_filter_open', String(next));
       }
       return next;
@@ -945,12 +951,12 @@ export default function TransactionDashboard() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-800">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2 shadow-2xs pt-safe">
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between gap-2 shadow-2xs pt-safe">
         {/* Logo & Brand */}
-        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0 min-w-0">
           <div className="flex items-center gap-1.5 sm:gap-2">
-            <Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
-            <span className="font-extrabold text-lg sm:text-xl tracking-tight text-slate-900">BankAnalyzer</span>
+            <Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 shrink-0" />
+            <span className="font-extrabold text-base sm:text-xl tracking-tight text-slate-900 truncate">BankAnalyzer</span>
           </div>
           <div className="h-5 w-px bg-slate-200 hidden md:block" />
           {/* Global Date Range Indicator */}
@@ -984,7 +990,7 @@ export default function TransactionDashboard() {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Mobile Search Toggle Button */}
           <button
             onClick={() => setShowMobileSearch(!showMobileSearch)}
@@ -997,19 +1003,19 @@ export default function TransactionDashboard() {
           {/* Filters & Statements Toggle Button */}
           <button
             onClick={toggleFilterPanel}
-            className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-xs font-semibold border transition-all duration-200 cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-xs font-semibold border transition-all duration-200 cursor-pointer ${
               isFilterPanelOpen 
                 ? 'bg-blue-50 border-blue-300 text-blue-700 shadow-2xs'
                 : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs'
             }`}
-            title="Toggle Advanced Filters and Uploaded Statements Slider"
+            title="Toggle Filters and Statements"
           >
             <SlidersHorizontal className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
-            <span className="hidden xs:inline font-bold">Filters</span>
+            <span className="hidden sm:inline font-bold">Filters</span>
 
             {/* Uploaded PDF Count Badge */}
-            <span className="flex items-center gap-1 bg-slate-100 text-slate-700 border border-slate-200 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold">
-              <FileText className="w-3 h-3 text-blue-600" />
+            <span className="flex items-center gap-0.5 bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+              <FileText className="w-2.5 h-2.5 text-blue-600" />
               <span>{documents.length}</span>
             </span>
 
@@ -1025,31 +1031,32 @@ export default function TransactionDashboard() {
           <div 
             key={dropzoneKey}
             {...getRootProps()} 
-            className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold cursor-pointer shadow-2xs transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-xs font-semibold cursor-pointer shadow-2xs transition-all ${
               uploading 
                 ? 'bg-blue-400 text-white cursor-not-allowed'
                 : isDragActive
                   ? 'bg-blue-800 text-white ring-2 ring-blue-400'
                   : 'bg-blue-600 hover:bg-blue-700 text-white'
             }`}
+            title="Upload Bank Statement PDF"
           >
             <input {...getInputProps()} />
             {uploading ? (
               <>
                 <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
-                <span className="hidden xs:inline">Uploading...</span>
+                <span className="hidden sm:inline">Uploading...</span>
               </>
             ) : (
               <>
                 <UploadCloud className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                <span className="hidden xs:inline">Upload</span>
+                <span className="hidden sm:inline">Upload</span>
               </>
             )}
           </div>
 
           {/* Authenticated User Status & Logout */}
           {user && (
-            <div className="flex items-center gap-1 sm:gap-2 pl-1.5 sm:pl-2 border-l border-slate-200">
+            <div className="flex items-center gap-1 sm:gap-2 pl-1 sm:pl-2 border-l border-slate-200">
               {/* Biometrics Status / Manage Button */}
               {biometricSupported && (
                 <button
@@ -1059,7 +1066,7 @@ export default function TransactionDashboard() {
                     setBioModalError(null);
                     setBioPasswordInput('');
                   }}
-                  className={`flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  className={`p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                     biometricProfile
                       ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
                       : 'bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100'
@@ -1166,46 +1173,46 @@ export default function TransactionDashboard() {
         )}
 
         {/* Dynamic Summary Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-          <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-2xs border-t-4 border-t-indigo-500">
-            <span className="text-[11px] sm:text-xs text-slate-500 font-medium">Matching Transactions</span>
-            <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-1">{summaryMetrics.totalCount}</div>
-            <span className="text-[10px] sm:text-[11px] text-slate-400">Total in view</span>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4">
+          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-2xs border-t-4 border-t-indigo-500">
+            <span className="text-[10px] sm:text-xs text-slate-500 font-semibold uppercase tracking-wider block truncate">Transactions</span>
+            <div className="text-lg sm:text-2xl font-bold text-slate-900 mt-0.5 truncate">{summaryMetrics.totalCount}</div>
+            <span className="text-[9px] sm:text-[11px] text-slate-400 block truncate">Total in view</span>
           </div>
 
-          <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-2xs border-t-4 border-t-emerald-500">
-            <span className="text-[11px] sm:text-xs text-slate-500 font-medium">Total Credits</span>
-            <div className="text-xl sm:text-2xl font-bold text-emerald-600 mt-1">
+          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-2xs border-t-4 border-t-emerald-500">
+            <span className="text-[10px] sm:text-xs text-slate-500 font-semibold uppercase tracking-wider block truncate">Total Credits</span>
+            <div className="text-lg sm:text-2xl font-bold text-emerald-600 mt-0.5 truncate">
               ₹{summaryMetrics.totalCredits.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </div>
-            <span className="text-[10px] sm:text-[11px] text-emerald-600 font-medium">Incoming funds</span>
+            <span className="text-[9px] sm:text-[11px] text-emerald-600 font-medium block truncate">Incoming funds</span>
           </div>
 
-          <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-2xs border-t-4 border-t-rose-500">
-            <span className="text-[11px] sm:text-xs text-slate-500 font-medium">Total Debits</span>
-            <div className="text-xl sm:text-2xl font-bold text-rose-600 mt-1">
+          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-2xs border-t-4 border-t-rose-500">
+            <span className="text-[10px] sm:text-xs text-slate-500 font-semibold uppercase tracking-wider block truncate">Total Debits</span>
+            <div className="text-lg sm:text-2xl font-bold text-rose-600 mt-0.5 truncate">
               ₹{summaryMetrics.totalDebits.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </div>
-            <span className="text-[10px] sm:text-[11px] text-rose-600 font-medium">Outgoing payments</span>
+            <span className="text-[9px] sm:text-[11px] text-rose-600 font-medium block truncate">Outgoing payments</span>
           </div>
 
-          <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-2xs border-t-4 border-t-blue-500">
-            <span className="text-[11px] sm:text-xs text-slate-500 font-medium">Net Amount</span>
-            <div className={`text-xl sm:text-2xl font-bold mt-1 ${summaryMetrics.netAmount >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
+          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-2xs border-t-4 border-t-blue-500">
+            <span className="text-[10px] sm:text-xs text-slate-500 font-semibold uppercase tracking-wider block truncate">Net Amount</span>
+            <div className={`text-lg sm:text-2xl font-bold mt-0.5 truncate ${summaryMetrics.netAmount >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
               ₹{summaryMetrics.netAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </div>
-            <span className="text-[10px] sm:text-[11px] text-slate-400">Net cashflow</span>
+            <span className="text-[9px] sm:text-[11px] text-slate-400 block truncate">Net cashflow</span>
           </div>
 
-          <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-2xs border-t-4 border-t-purple-500">
-            <span className="text-[11px] sm:text-xs text-slate-500 font-medium">Unique Parties</span>
-            <div className="text-xl sm:text-2xl font-bold text-purple-600 mt-1">{summaryMetrics.uniqueNames}</div>
-            <span className="text-[10px] sm:text-[11px] text-slate-400">Identified entities</span>
+          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-2xs border-t-4 border-t-purple-500">
+            <span className="text-[10px] sm:text-xs text-slate-500 font-semibold uppercase tracking-wider block truncate">Unique Parties</span>
+            <div className="text-lg sm:text-2xl font-bold text-purple-600 mt-0.5 truncate">{summaryMetrics.uniqueNames}</div>
+            <span className="text-[9px] sm:text-[11px] text-slate-400 block truncate">Identified entities</span>
           </div>
 
-          <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-2xs border-t-4 border-t-amber-500">
-            <span className="text-[11px] sm:text-xs text-slate-500 font-medium">Filtered Period</span>
-            <div className="text-xs font-bold text-slate-900 mt-1 truncate" title={`${summaryMetrics.firstDate} → ${summaryMetrics.lastDate}`}>
+          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-2xs border-t-4 border-t-amber-500">
+            <span className="text-[10px] sm:text-xs text-slate-500 font-semibold uppercase tracking-wider block truncate">Filtered Period</span>
+            <div className="text-xs font-bold text-slate-900 mt-0.5 truncate" title={`${summaryMetrics.firstDate} → ${summaryMetrics.lastDate}`}>
               {summaryMetrics.firstDate}
             </div>
             <div className="text-xs font-bold text-slate-900 truncate">
@@ -1214,48 +1221,137 @@ export default function TransactionDashboard() {
           </div>
         </div>
 
+        {/* Active Filter Chips (Instant View & Dismiss on Mobile & Desktop) */}
+        {activeFiltersCount > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 text-xs">
+            <span className="text-[11px] font-bold text-slate-400 shrink-0">Active Filters:</span>
+            {selectedDocId !== 'ALL' && (
+              <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-full text-[11px] font-medium shrink-0">
+                Doc: {documents.find(d => d.document_id === selectedDocId)?.bank_name || '1 Statement'}
+                <button onClick={() => setSelectedDocId('ALL')} className="hover:text-blue-900 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {selectedYear !== 'ALL' && (
+              <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-full text-[11px] font-medium shrink-0">
+                Year: {selectedYear}
+                <button onClick={() => setSelectedYear('ALL')} className="hover:text-blue-900 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {selectedMonth !== 'ALL' && (
+              <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-full text-[11px] font-medium shrink-0">
+                Month: {MONTH_NAMES[Number(selectedMonth) - 1]}
+                <button onClick={() => setSelectedMonth('ALL')} className="hover:text-blue-900 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {selectedType !== 'ALL' && (
+              <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-full text-[11px] font-medium shrink-0">
+                Type: {selectedType === 'DEBIT' ? 'Debits' : 'Credits'}
+                <button onClick={() => setSelectedType('ALL')} className="hover:text-blue-900 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {selectedBank !== 'ALL' && (
+              <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-full text-[11px] font-medium shrink-0">
+                Bank: {selectedBank}
+                <button onClick={() => setSelectedBank('ALL')} className="hover:text-blue-900 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {globalSearch && (
+              <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-full text-[11px] font-medium shrink-0">
+                Search: &quot;{globalSearch}&quot;
+                <button onClick={() => setGlobalSearch('')} className="hover:text-blue-900 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            <button
+              onClick={() => {
+                setSelectedDocId('ALL');
+                setSelectedYear('ALL');
+                setSelectedMonth('ALL');
+                setSelectedBank('ALL');
+                setSelectedType('ALL');
+                setSelectedParty('');
+                setMinAmount(0);
+                setMaxAmount(highestAmount);
+                setFromDate('');
+                setToDate('');
+                setGlobalSearch('');
+              }}
+              className="text-[11px] font-bold text-rose-600 hover:text-rose-800 underline shrink-0 cursor-pointer pl-1"
+            >
+              Clear All
+            </button>
+          </div>
+        )}
+
         {/* Dashboard Workspace */}
         <div className="flex gap-6 items-start transition-all duration-300">
           {/* SLIDER / COLLAPSIBLE ADVANCED FILTER & STATEMENTS TAB */}
           {isFilterPanelOpen && (
-            <div className="w-84 shrink-0 bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-5 transition-all duration-300 animate-in fade-in slide-in-from-left-4 sticky top-24">
-              {/* Header with Navigation Tabs */}
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs font-bold">
+            <>
+              {/* Mobile Backdrop Overlay (< lg) */}
+              <div 
+                className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs lg:hidden animate-in fade-in"
+                onClick={() => setIsFilterPanelOpen(false)}
+              />
+
+              {/* Drawer (< lg) & Sticky Sidebar (lg+) container */}
+              <aside 
+                className="fixed inset-y-0 right-0 z-50 w-full max-w-xs sm:max-w-sm bg-white shadow-2xl p-4 sm:p-5 flex flex-col justify-between overflow-hidden animate-in slide-in-from-right duration-200 lg:static lg:inset-auto lg:z-auto lg:w-80 lg:shrink-0 lg:shadow-sm lg:rounded-xl lg:border lg:border-slate-200 lg:top-24 lg:self-start lg:animate-in lg:fade-in lg:slide-in-from-left-4"
+                style={{ maxHeight: '100dvh' }}
+              >
+                {/* Header with Navigation Tabs */}
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+                  <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs font-bold">
+                    <button
+                      onClick={() => setSidebarTab('filters')}
+                      className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
+                        sidebarTab === 'filters' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-black'
+                      }`}
+                    >
+                      Filters
+                    </button>
+                    <button
+                      onClick={() => setSidebarTab('documents')}
+                      className={`px-3 py-1.5 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
+                        sidebarTab === 'documents' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-black'
+                      }`}
+                    >
+                      <span>Statements</span>
+                      <span className="bg-blue-600 text-white rounded-full px-1.5 py-0.2 text-[10px]">
+                        {documents.length}
+                      </span>
+                    </button>
+                  </div>
+
                   <button
-                    onClick={() => setSidebarTab('filters')}
-                    className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                      sidebarTab === 'filters' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-black'
-                    }`}
+                    onClick={() => {
+                      setIsFilterPanelOpen(false);
+                      if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+                        localStorage.setItem('bankanalyzer_filter_open', 'false');
+                      }
+                    }}
+                    className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 cursor-pointer"
+                    title="Close panel"
                   >
-                    Filters
-                  </button>
-                  <button
-                    onClick={() => setSidebarTab('documents')}
-                    className={`px-3 py-1.5 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
-                      sidebarTab === 'documents' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-black'
-                    }`}
-                  >
-                    <span>Statements</span>
-                    <span className="bg-blue-600 text-white rounded-full px-1.5 py-0.2 text-[10px]">
-                      {documents.length}
-                    </span>
+                    <X className="w-5 h-5 lg:hidden" />
+                    <ChevronLeft className="w-4 h-4 hidden lg:block" />
                   </button>
                 </div>
 
-                <button
-                  onClick={() => {
-                    setIsFilterPanelOpen(false);
-                    if (typeof window !== 'undefined') localStorage.setItem('bankanalyzer_filter_open', 'false');
-                  }}
-                  className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100 cursor-pointer"
-                  title="Collapse panel slider"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* TAB 1: ADVANCED FILTERS */}
+                {/* Scrollable Content (Filters or Documents) */}
+                <div className="flex-1 overflow-y-auto pr-1 space-y-4 my-2">
+                  {/* TAB 1: ADVANCED FILTERS */}
               {sidebarTab === 'filters' && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between text-xs">
@@ -1508,29 +1604,43 @@ export default function TransactionDashboard() {
                 </div>
               )}
             </div>
-          )}
+
+            {/* Mobile Drawer Footer with Apply Button (< lg) */}
+            <div className="pt-3 border-t border-slate-100 lg:hidden shrink-0 flex items-center gap-2">
+              <button
+                onClick={() => setIsFilterPanelOpen(false)}
+                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer text-center transition-colors"
+              >
+                Apply & View ({filteredData.length} Txns)
+              </button>
+            </div>
+          </aside>
+        </>
+      )}
 
           {/* Center Table Area (Automatically expands to 100% when filter panel slides closed) */}
           <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-w-0 transition-all duration-300">
             {/* Table Action Bar */}
-            <div className="p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
-              <div className="flex items-center gap-2">
+            <div className="p-3 sm:p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5 bg-slate-50/50">
+              <div className="flex items-center gap-2 min-w-0">
                 {!isFilterPanelOpen && (
                   <button
                     onClick={() => {
                       setIsFilterPanelOpen(true);
-                      if (typeof window !== 'undefined') localStorage.setItem('bankanalyzer_filter_open', 'true');
+                      if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+                        localStorage.setItem('bankanalyzer_filter_open', 'true');
+                      }
                     }}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                    className="hidden lg:flex items-center gap-1.5 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
                     title="Open Filters and Statements Slider"
                   >
                     <ChevronRight className="w-4 h-4" />
                     <span>Open Filters ({documents.length} PDFs)</span>
                   </button>
                 )}
-                <span className="text-sm font-bold text-slate-900">Transactions Spreadsheet</span>
-                <span className="text-xs bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full font-mono">
-                  {filteredData.length} records
+                <span className="text-sm font-bold text-slate-900 truncate">Transactions Spreadsheet</span>
+                <span className="text-xs bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full font-mono font-semibold shrink-0">
+                  {filteredData.length}
                 </span>
                 {selectedDocId !== 'ALL' && (
                   <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md flex items-center gap-1 font-medium">
@@ -1542,31 +1652,33 @@ export default function TransactionDashboard() {
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   onClick={exportToCSV}
                   disabled={!filteredData.length}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 shadow-2xs disabled:opacity-50 cursor-pointer"
+                  className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 shadow-2xs disabled:opacity-50 cursor-pointer"
                   title="Export to CSV / Excel"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Export CSV</span>
+                  <span className="hidden sm:inline">Export</span>
+                  <span>CSV</span>
                 </button>
 
                 <button
                   onClick={generateFilteredPDF}
                   disabled={!filteredData.length}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 shadow-2xs disabled:opacity-50 cursor-pointer"
+                  className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 shadow-2xs disabled:opacity-50 cursor-pointer"
                   title="Generate Filtered PDF"
                 >
                   <FileText className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Generate Filtered PDF</span>
+                  <span className="hidden sm:inline">Filtered</span>
+                  <span>PDF</span>
                 </button>
               </div>
             </div>
 
             {/* Mobile Responsive Cards View (< md screens) */}
-            <div className="md:hidden divide-y divide-slate-100 flex-1 overflow-y-auto max-h-[620px]">
+            <div className="md:hidden divide-y divide-slate-100 flex-1">
               {loading ? (
                 <div className="py-12 text-center text-slate-400">
                   <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
@@ -1582,16 +1694,16 @@ export default function TransactionDashboard() {
                   const isCredit = (t.credit || 0) > 0;
                   const amountVal = isCredit ? t.credit : (t.debit || Math.abs(t.amount || 0));
                   return (
-                    <div key={row.id} className="p-3.5 hover:bg-blue-50/30 transition-colors space-y-2 text-xs">
+                    <div key={row.id} className="p-3 sm:p-3.5 hover:bg-blue-50/20 active:bg-slate-50 transition-colors space-y-2 text-xs">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <div className="font-bold text-slate-900 text-sm truncate">{t.name || 'Unknown Party'}</div>
                           <div className="text-[11px] text-slate-500 font-mono flex flex-wrap items-center gap-1.5 mt-0.5">
-                            <span className="bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded font-semibold">
+                            <span className="bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded font-semibold shrink-0">
                               {t.transaction_date ? format(parseISO(t.transaction_date), 'dd MMM yyyy') : '-'}
                             </span>
                             {t.bank_name && (
-                              <span className="text-slate-400">• {t.bank_name}</span>
+                              <span className="text-slate-400 truncate">• {t.bank_name}</span>
                             )}
                           </div>
                         </div>
@@ -1606,13 +1718,13 @@ export default function TransactionDashboard() {
                       </div>
 
                       {t.description && (
-                        <p className="text-[11px] text-slate-600 line-clamp-2 bg-slate-50/80 p-2 rounded border border-slate-100 font-mono">
+                        <p className="text-[11px] text-slate-600 line-clamp-2 bg-slate-50 p-2 rounded-lg border border-slate-100 font-mono break-words">
                           {t.description}
                         </p>
                       )}
 
                       <div className="flex items-center justify-between text-[11px] pt-1">
-                        <span className="text-slate-400 font-mono truncate max-w-[160px]">
+                        <span className="text-slate-400 font-mono truncate max-w-[150px]">
                           Ref: {t.transaction_id || '-'}
                         </span>
                         <button
@@ -1622,7 +1734,7 @@ export default function TransactionDashboard() {
                             setPreviewTxn(t);
                             setImageZoom(100);
                           }}
-                          className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                          className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
                         >
                           <Eye className="w-3 h-3" />
                           <span>Page {t.source_page || 1} PDF</span>
@@ -1678,36 +1790,41 @@ export default function TransactionDashboard() {
             </div>
 
             {/* Pagination Controls */}
-            <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
-              <div className="flex items-center gap-2">
-                <span>Rows per page:</span>
-                <select
-                  value={table.getState().pagination.pageSize}
-                  onChange={e => table.setPageSize(Number(e.target.value))}
-                  className="bg-white border border-slate-200 rounded px-2 py-1 text-xs outline-none"
-                >
-                  {[15, 25, 50, 100].map(sz => (
-                    <option key={sz} value={sz}>{sz}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span>
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
+              <div className="flex items-center justify-between w-full sm:w-auto gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span>Rows:</span>
+                  <select
+                    value={table.getState().pagination.pageSize}
+                    onChange={e => table.setPageSize(Number(e.target.value))}
+                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs outline-none"
+                  >
+                    {[15, 25, 50, 100].map(sz => (
+                      <option key={sz} value={sz}>{sz}</option>
+                    ))}
+                  </select>
+                </div>
+                <span className="sm:hidden font-medium">
                   Page <b>{table.getState().pagination.pageIndex + 1}</b> of <b>{table.getPageCount() || 1}</b>
                 </span>
-                <div className="flex gap-1">
+              </div>
+
+              <div className="flex items-center justify-between w-full sm:w-auto gap-3">
+                <span className="hidden sm:inline">
+                  Page <b>{table.getState().pagination.pageIndex + 1}</b> of <b>{table.getPageCount() || 1}</b>
+                </span>
+                <div className="flex gap-2 w-full sm:w-auto">
                   <button
                     onClick={() => table.previousPage()}
                     disabled={!table.getCanPreviousPage()}
-                    className="px-2.5 py-1 bg-white border border-slate-200 rounded font-medium disabled:opacity-40 hover:bg-slate-100 cursor-pointer"
+                    className="flex-1 sm:flex-initial text-center px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-medium disabled:opacity-40 hover:bg-slate-100 cursor-pointer shadow-2xs"
                   >
                     Previous
                   </button>
                   <button
                     onClick={() => table.nextPage()}
                     disabled={!table.getCanNextPage()}
-                    className="px-2.5 py-1 bg-white border border-slate-200 rounded font-medium disabled:opacity-40 hover:bg-slate-100 cursor-pointer"
+                    className="flex-1 sm:flex-initial text-center px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-medium disabled:opacity-40 hover:bg-slate-100 cursor-pointer shadow-2xs"
                   >
                     Next
                   </button>
@@ -1718,29 +1835,67 @@ export default function TransactionDashboard() {
         </div>
       </div>
 
+      {/* Mobile Bottom Quick Actions Bar (< lg) */}
+      <div className="lg:hidden sticky bottom-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-4 py-2 flex items-center justify-around shadow-lg pb-safe shrink-0">
+        <button
+          onClick={() => {
+            setSidebarTab('filters');
+            setIsFilterPanelOpen(true);
+          }}
+          className="flex flex-col items-center gap-0.5 text-slate-700 hover:text-blue-600 relative cursor-pointer py-1 px-3"
+        >
+          <SlidersHorizontal className="w-4 h-4 text-blue-600" />
+          <span className="text-[10px] font-bold">Filters</span>
+          {activeFiltersCount > 0 && (
+            <span className="absolute top-0 right-1 bg-blue-600 text-white rounded-full px-1 text-[9px] font-bold">
+              {activeFiltersCount}
+            </span>
+          )}
+        </button>
+
+        <div {...getRootProps()} className="flex flex-col items-center gap-0.5 text-blue-600 cursor-pointer py-1 px-3">
+          <input {...getInputProps()} />
+          <div className="p-1.5 bg-blue-600 text-white rounded-full shadow-xs">
+            <UploadCloud className="w-4 h-4" />
+          </div>
+          <span className="text-[10px] font-bold text-blue-600">Upload PDF</span>
+        </div>
+
+        <button
+          onClick={() => {
+            setSidebarTab('documents');
+            setIsFilterPanelOpen(true);
+          }}
+          className="flex flex-col items-center gap-0.5 text-slate-700 hover:text-blue-600 relative cursor-pointer py-1 px-3"
+        >
+          <FileText className="w-4 h-4 text-blue-600" />
+          <span className="text-[10px] font-bold">PDFs ({documents.length})</span>
+        </button>
+      </div>
+
       {/* VIEW IN PDF STATEMENT MODAL */}
       {previewDocId && (
         <div 
-          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4"
           onClick={() => setPreviewDocId(null)}
         >
           <div 
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[88vh] flex flex-col overflow-hidden animate-in zoom-in-95"
+            className="bg-white rounded-none sm:rounded-2xl shadow-2xl w-full max-w-5xl h-full sm:h-[88vh] flex flex-col overflow-hidden animate-in zoom-in-95"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="px-6 py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between bg-slate-50 gap-3">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 text-blue-700 rounded-lg">
-                  <FileText className="w-5 h-5" />
+            <div className="px-3 sm:px-6 py-2.5 sm:py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between bg-slate-50 gap-2 shrink-0">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className="p-1.5 sm:p-2 bg-blue-100 text-blue-700 rounded-lg shrink-0">
+                  <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                <div className="min-w-0">
+                  <h3 className="font-bold text-slate-900 text-xs sm:text-sm truncate">
                     Statement Page Viewer
                   </h3>
                   {previewTxn && (
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Selected: <b>{previewTxn.name}</b> • {previewTxn.transaction_date} • 
+                    <p className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[200px] sm:max-w-md">
+                      <b>{previewTxn.name}</b> • {previewTxn.transaction_date} • 
                       <span className={previewTxn.amount >= 0 ? 'text-green-600 font-bold ml-1' : 'text-red-600 font-bold ml-1'}>
                         ₹{Math.abs(previewTxn.amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
                       </span>
@@ -1750,7 +1905,7 @@ export default function TransactionDashboard() {
               </div>
 
               {/* Header Viewer Controls */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 {/* Page Navigation */}
                 <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs">
                   <button
@@ -1786,25 +1941,25 @@ export default function TransactionDashboard() {
                 <div className="flex items-center bg-slate-200 p-0.5 rounded-lg text-xs font-semibold">
                   <button
                     onClick={() => setViewerMode('image')}
-                    className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                    className={`px-2 py-1 rounded-md transition-all cursor-pointer ${
                       viewerMode === 'image' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-black'
                     }`}
                   >
-                    High-Res Page
+                    Image
                   </button>
                   <button
                     onClick={() => setViewerMode('pdf')}
-                    className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                    className={`px-2 py-1 rounded-md transition-all cursor-pointer ${
                       viewerMode === 'pdf' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-black'
                     }`}
                   >
-                    Interactive PDF
+                    PDF
                   </button>
                 </div>
 
                 {/* Zoom controls for image view */}
                 {viewerMode === 'image' && (
-                  <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs">
+                  <div className="hidden sm:flex items-center bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs">
                     <button
                       onClick={() => setImageZoom(z => Math.max(50, z - 20))}
                       className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
@@ -1838,17 +1993,17 @@ export default function TransactionDashboard() {
                   href={`${getApiBase()}/api/v1/documents/${previewDocId}/pdf?token=${encodeURIComponent(session?.access_token || '')}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                  className="hidden sm:flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
                   title="Open full PDF in new browser tab"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">New Tab</span>
+                  <span>New Tab</span>
                 </a>
 
                 {/* Close Button */}
                 <button 
                   onClick={() => setPreviewDocId(null)}
-                  className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200 cursor-pointer ml-1"
+                  className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200 cursor-pointer ml-0.5"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -1914,26 +2069,26 @@ export default function TransactionDashboard() {
 
       {/* PASSWORD PROTECTED PDF UNLOCK MODAL */}
       {pendingPasswordFile && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
           <div 
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 overflow-hidden animate-in zoom-in-95 border border-slate-100"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 sm:p-6 max-h-[92vh] overflow-y-auto animate-in zoom-in-95 border border-slate-100"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-amber-100 text-amber-700 rounded-xl">
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <div className="p-2 sm:p-2.5 bg-amber-100 text-amber-700 rounded-xl shrink-0">
                   <Lock className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-900 text-base">Password Protected PDF</h3>
-                  <p className="text-xs text-slate-500 truncate max-w-[240px]" title={pendingPasswordFile.name}>
+                  <p className="text-xs text-slate-500 truncate max-w-[200px] sm:max-w-[240px]" title={pendingPasswordFile.name}>
                     {pendingPasswordFile.name}
                   </p>
                 </div>
               </div>
               <button 
                 onClick={() => { setPendingPasswordFile(null); setStatementPassword(''); setPasswordError(null); setDropzoneKey(prev => prev + 1); }}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-100 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1949,20 +2104,20 @@ export default function TransactionDashboard() {
                     value={statementPassword}
                     onChange={(e) => setStatementPassword(e.target.value)}
                     autoFocus
-                    className="w-full bg-slate-50 border border-slate-300 focus:border-blue-600 focus:bg-white rounded-lg px-3.5 py-2 text-sm outline-none pr-10 transition-all font-mono"
+                    className="w-full bg-slate-50 border border-slate-300 focus:border-blue-600 focus:bg-white rounded-lg px-3.5 py-2.5 text-base sm:text-sm outline-none pr-10 transition-all font-mono"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(p => !p)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-1"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
                 {passwordError && (
                   <p className="text-xs font-semibold text-rose-600 mt-2 flex items-center gap-1">
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    {passwordError}
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{passwordError}</span>
                   </p>
                 )}
               </div>
@@ -1978,14 +2133,14 @@ export default function TransactionDashboard() {
                 <button
                   type="button"
                   onClick={() => { setPendingPasswordFile(null); setStatementPassword(''); setPasswordError(null); setDropzoneKey(prev => prev + 1); }}
-                  className="flex-1 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
+                  className="flex-1 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={!statementPassword.trim() || unlocking}
-                  className="flex-1 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                  className="flex-1 py-2.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
                 >
                   {unlocking ? <RefreshCw className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
                   <span>{unlocking ? 'Unlocking...' : 'Unlock & Process'}</span>
@@ -1999,16 +2154,16 @@ export default function TransactionDashboard() {
       {/* Biometric Management Modal */}
       {showBiometricModal && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in"
           onClick={() => { setShowBiometricModal(false); setBioModalError(null); setBioPasswordInput(''); }}
         >
           <div 
-            className="bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 max-w-md w-full space-y-4"
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 p-5 sm:p-6 max-w-md w-full space-y-4 max-h-[92vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-xl ${biometricProfile ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <div className={`p-2 sm:p-2.5 rounded-xl ${biometricProfile ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'} shrink-0`}>
                   <Fingerprint className="w-5 h-5" />
                 </div>
                 <div>
@@ -2022,7 +2177,7 @@ export default function TransactionDashboard() {
               </div>
               <button 
                 onClick={() => { setShowBiometricModal(false); setBioModalError(null); setBioPasswordInput(''); }}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-100 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2049,14 +2204,14 @@ export default function TransactionDashboard() {
                   <button
                     type="button"
                     onClick={handleRemoveBiometrics}
-                    className="flex-1 py-2 px-3 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg cursor-pointer transition-colors"
+                    className="flex-1 py-2.5 px-3 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg cursor-pointer transition-colors"
                   >
                     Remove from Device
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowBiometricModal(false)}
-                    className="flex-1 py-2 px-3 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
+                    className="flex-1 py-2.5 px-3 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
                   >
                     Done
                   </button>
@@ -2080,12 +2235,12 @@ export default function TransactionDashboard() {
                       onChange={(e) => setBioPasswordInput(e.target.value)}
                       autoFocus
                       required
-                      className="w-full bg-slate-50 border border-slate-300 focus:border-blue-600 focus:bg-white rounded-lg px-3.5 py-2 text-sm outline-none pr-10 transition-all font-mono"
+                      className="w-full bg-slate-50 border border-slate-300 focus:border-blue-600 focus:bg-white rounded-lg px-3.5 py-2.5 text-base sm:text-sm outline-none pr-10 transition-all font-mono"
                     />
                     <button
                       type="button"
                       onClick={() => setShowBioPassword(p => !p)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-1"
                     >
                       {showBioPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -2102,14 +2257,14 @@ export default function TransactionDashboard() {
                   <button
                     type="button"
                     onClick={() => { setShowBiometricModal(false); setBioModalError(null); setBioPasswordInput(''); }}
-                    className="flex-1 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
+                    className="flex-1 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={!bioPasswordInput || bioModalLoading}
-                    className="flex-1 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                    className="flex-1 py-2.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
                   >
                     {bioModalLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Fingerprint className="w-4 h-4" />}
                     <span>{bioModalLoading ? 'Verifying...' : 'Enable Fingerprint'}</span>
