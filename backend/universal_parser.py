@@ -48,6 +48,28 @@ DATE_REGEX = re.compile(
     r'^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$'       # 2025-01-05
 )
 
+STOP_MARKERS = [
+    "TOTAL:",
+    "TOTAL :",
+    "TOTAL DEPOSITS",
+    "TOTAL WITHDRAWALS",
+    "TOTAL AMOUNT",
+    "ACCOUNT RELATED OTHER INFORMATION",
+    "OTHER INFORMATION",
+    "LEGENDS FOR TRANSACTIONS",
+    "LEGENDS",
+    "TRANSACTION LEGENDS",
+    "NOMINATION ACCOUNT TYPE",
+    "THIS IS A SYSTEM GENERATED",
+    "SYSTEM GENERATED STATEMENT",
+    "SINCERELY,",
+    "TEAM ICICI BANK",
+    "END OF STATEMENT",
+    "END OF REPORT",
+    "CLOSING BALANCE INCLUDES",
+    "STATEMENTSUMMARY"
+]
+
 def clean_amount(val) -> float:
     if val is None:
         return 0.0
@@ -80,42 +102,75 @@ def parse_date(date_str):
     except:
         return None, None, None
 
-def extract_party_name(narration: str) -> str:
+def extract_party_name(narration: str, amount: float = 0.0, is_credit: Optional[bool] = None) -> str:
     if not narration:
         return "Unknown"
     narration = narration.strip()
+    upper = narration.upper()
+
+    if is_credit is None:
+        is_credit = (amount > 0)
+
+    # 0. Opening Balance
+    if upper.startswith("B/F") or upper in ("B/F", "B/F.", "B/F-"):
+        return "B/F"
+
+    # 1. Interest Matching Priority (Int.Pd, Interest Paid, Interest Credit)
+    if ":INT.PD:" in upper or "INT.PD:" in upper or "INT.PD" in upper:
+        return "Interest Credit" if is_credit else "Interest Charge"
     
-    # UPI pattern: UPI-<NAME>-<VPA>
+    if "INTEREST" in upper or "INT PAID" in upper or "INT. PAID" in upper or "INT.CR" in upper:
+        return "Interest Credit" if is_credit else "Interest Charge"
+
+    # 2. Bank Charges & SMS Charges
+    if "SMSCHGS" in upper or "SMS CHGS" in upper or "SMS CHARGES" in upper:
+        return "SMS Charges"
+    if "CONSOLIDATED CHARGES" in upper or "SERVICE CHARGES" in upper or "CHG:" in upper:
+        return "Bank Charges"
+
+    # 3. Direction-Aware ATM / Cash Withdrawal Check
+    if "NWD-" in upper or "ATM" in upper or "CASH WDL" in upper or "CASH WITHDRAWAL" in upper:
+        if is_credit:
+            return "ATM Reversal / Refund"
+        else:
+            return "Cash Withdrawal (ATM)"
+
+    # 4. UPI Patterns
+    # Pattern A: <NAME> UPI/... or <NAME> UPI-... (common in ICICI, where party name precedes UPI)
+    m = re.match(r'^([A-Za-z\s\.\&]+?)\s+(?:UPI[\/-]|IMPS[\/-]|NEFT[\/-])', narration)
+    if m and len(m.group(1).strip()) > 2 and not m.group(1).upper().startswith(("B/F", "BY ", "TO ")):
+        return m.group(1).strip()
+
+    # Pattern B: UPI-<NAME>-<VPA>
     m = re.match(r'UPI-([A-Za-z0-9\s]+?)(?:-[A-Za-z0-9@]+|\s*@|\/|$)', narration)
     if m:
         return m.group(1).replace('-', ' ').strip()
-        
-    # NEFT / RTGS / IMPS pattern
+
+    # Pattern C: UPI/<NAME>/...
+    m = re.match(r'UPI\/([A-Za-z0-9\s]+?)(?:\/|$)', narration)
+    if m:
+        return m.group(1).replace('-', ' ').strip()
+
+    # 5. NEFT / RTGS / IMPS pattern
     m = re.match(r'(?:NEFT|RTGS|IMPS)(?:CR|DR)?-[0-9A-Za-z]+-(?:REM-)?([A-Za-z0-9\s]+?)(?:-[A-Za-z0-9]+|\/|$)', narration)
     if m:
         return m.group(1).replace('-', ' ').strip()
-        
-    # ACH / NACH pattern
+
+    # 6. ACH / NACH pattern
     m = re.match(r'(?:ACH|NACH)(?:D|CR|DR)?-([A-Za-z0-9\s\.\&]+?)(?:-[0-9]+|\/|$)', narration)
     if m:
         return m.group(1).replace('-', ' ').strip()
-        
-    # Cheque pattern
+
+    # 7. Cheque pattern
     m = re.match(r'(?:CHQPAID|CHQREC)-[A-Za-z0-9]+-[A-Za-z0-9]+-([A-Za-z0-9\s]+)', narration)
     if m:
         return m.group(1).strip()
-        
-    # ATM Cash withdrawal
-    if narration.startswith("NWD-") or "ATM" in narration.upper():
-        return "Cash Withdrawal (ATM)"
-        
-    if "INTEREST" in narration.upper():
-        return "Bank Interest"
-        
-    if "AUTOPAY" in narration.upper() or "BILLPAY" in narration.upper():
+
+    if "AUTOPAY" in upper or "BILLPAY" in upper:
         return "Bill Payment / AutoPay"
-        
-    return narration.split('-')[0].strip()[:35]
+
+    clean = narration.split('-')[0].split('/')[0].strip()[:35]
+    return clean or "Unknown"
 
 def unlock_pdf_if_needed(file_path: str, password: Optional[str] = None):
     """
@@ -325,84 +380,93 @@ def parse_universal_statement(file_path: str, password: Optional[str] = None) ->
 
             # Parse lines using dynamic columns
             if col_bounds:
-                current_txn = None
-                for y in sorted_ys:
-                    if header_y is not None and page_idx == 0 and y <= header_y + 4:
-                        continue
+                # Check if this page has horizontal dividing lines in the table area (Grid/Bordered table like ICICI)
+                page_h_lines = []
+                if header_y is not None:
+                    for l in page.lines:
+                        if abs(l['top'] - l['bottom']) < 2.0 and l['width'] > 30 and l['top'] > header_y - 2:
+                            page_h_lines.append(round(l['top'], 1))
+                page_h_lines = sorted(list(set(page_h_lines)))
 
-                    lwords = sorted(lines[y], key=lambda x: x['x0'])
-                    ltext = ' '.join(w['text'] for w in lwords).strip()
+                statement_ended = False
 
-                    # Termination conditions
-                    if any(k in ltext.upper() for k in ["STATEMENTSUMMARY", "OPENINGBALANCE", "CLOSINGBALANCEINCLUDES", "END OF STATEMENT"]):
-                        if current_txn:
-                            transactions.append(current_txn)
-                            current_txn = None
-                        break
+                if len(page_h_lines) >= 2:
+                    # Bounded Row Extraction for Grid/Bordered statements (ICICI, etc.)
+                    # Prevents multi-line vertical overlap and stops before footer bleed
+                    first_row_top = header_y + 12 if header_y is not None else 0
+                    for h in page_h_lines:
+                        if header_y is not None and header_y < h < header_y + 20:
+                            first_row_top = h
+                            break
 
-                    # Header noise filtering
-                    if any(noise in ltext.upper() for noise in [
-                        "STATEMENT OF ACCOUNT", "GENERATED ON", "PAGE NO", "REGISTERED OFFICE ADDRESS",
-                        "CONTENTS OF THIS STATEMENT", "THIS IS A COMPUTER"
-                    ]):
-                        continue
+                    row_bounds = []
+                    prev_line = first_row_top
+                    for h_y in page_h_lines:
+                        if h_y > first_row_top + 4:
+                            row_bounds.append((prev_line, h_y))
+                            prev_line = h_y
 
-                    # Header line repetition on next pages
-                    if ("Date" in ltext or "DATE" in ltext) and ("Narration" in ltext or "Particulars" in ltext or "NARRATION" in ltext):
-                        continue
-
-                    first_word = lwords[0]['text'].strip()
-
-                    # Check if line begins with a date
-                    date_cell = ""
-                    val_date_cell = ""
-                    desc_words = []
-                    ref_cell = ""
-                    debit_cell = ""
-                    credit_cell = ""
-                    bal_cell = ""
-                    amount_cell = ""
-
-                    for w in lwords:
-                        x_mid = (w['x0'] + w['x1']) / 2
-                        assigned_col = None
-                        for cb in col_bounds:
-                            if cb['left'] <= x_mid < cb['right']:
-                                assigned_col = cb['kind']
-                                break
-                        if not assigned_col:
+                    for top_y, bottom_y in row_bounds:
+                        row_words = [w for w in words if top_y <= w['top'] < bottom_y]
+                        if not row_words:
                             continue
 
-                        if assigned_col == 'date':
-                            date_cell += (" " + w['text'] if date_cell else w['text'])
-                        elif assigned_col == 'val_date':
-                            val_date_cell += (" " + w['text'] if val_date_cell else w['text'])
-                        elif assigned_col == 'desc':
-                            desc_words.append(w['text'])
-                        elif assigned_col == 'ref':
-                            ref_cell += (" " + w['text'] if ref_cell else w['text'])
-                        elif assigned_col == 'debit':
-                            debit_cell += w['text']
-                        elif assigned_col == 'credit':
-                            credit_cell += w['text']
-                        elif assigned_col == 'balance':
-                            bal_cell += w['text']
-                        elif assigned_col == 'amount':
-                            amount_cell += w['text']
+                        row_text_upper = ' '.join(w['text'].upper() for w in row_words).strip()
 
-                    # Check for date match on first word or date column
-                    is_new_txn = False
-                    txn_date = None
-                    if DATE_REGEX.match(first_word):
-                        is_new_txn = True
-                        txn_date = first_word
-                    elif date_cell and DATE_REGEX.match(date_cell.strip()):
-                        is_new_txn = True
-                        txn_date = date_cell.strip()
+                        # Stop condition: End of table reached
+                        if any(sm in row_text_upper for sm in STOP_MARKERS):
+                            statement_ended = True
+                            break
 
-                    if is_new_txn and txn_date:
-                        if current_txn:
-                            transactions.append(current_txn)
+                        date_cell = ""
+                        val_date_cell = ""
+                        desc_words = []
+                        ref_cell = ""
+                        debit_cell = ""
+                        credit_cell = ""
+                        bal_cell = ""
+                        amount_cell = ""
+
+                        # Sort row words top-to-bottom then left-to-right to preserve multi-line narration order
+                        sorted_row_words = sorted(row_words, key=lambda w: (w['top'], w['x0']))
+                        for w in sorted_row_words:
+                            x_mid = (w['x0'] + w['x1']) / 2
+                            assigned_col = None
+                            for cb in col_bounds:
+                                if cb['left'] <= x_mid < cb['right']:
+                                    assigned_col = cb['kind']
+                                    break
+                            if not assigned_col:
+                                continue
+
+                            if assigned_col == 'date':
+                                date_cell += (" " + w['text'] if date_cell else w['text'])
+                            elif assigned_col == 'val_date':
+                                val_date_cell += (" " + w['text'] if val_date_cell else w['text'])
+                            elif assigned_col == 'desc':
+                                desc_words.append(w['text'])
+                            elif assigned_col == 'ref':
+                                ref_cell += (" " + w['text'] if ref_cell else w['text'])
+                            elif assigned_col == 'debit':
+                                debit_cell += w['text']
+                            elif assigned_col == 'credit':
+                                credit_cell += w['text']
+                            elif assigned_col == 'balance':
+                                bal_cell += w['text']
+                            elif assigned_col == 'amount':
+                                amount_cell += w['text']
+
+                        txn_date = None
+                        if date_cell:
+                            for part in date_cell.split():
+                                if DATE_REGEX.match(part):
+                                    txn_date = part
+                                    break
+                        if not txn_date:
+                            for w in sorted_row_words:
+                                if DATE_REGEX.match(w['text']):
+                                    txn_date = w['text']
+                                    break
 
                         d_amt = clean_amount(debit_cell)
                         c_amt = clean_amount(credit_cell)
@@ -413,24 +477,148 @@ def parse_universal_statement(file_path: str, password: Optional[str] = None) ->
                             else:
                                 c_amt = abs(amt_val)
 
-                        current_txn = {
-                            'page': page_idx + 1,
-                            'date_str': txn_date,
-                            'val_date_str': val_date_cell.strip() or txn_date,
-                            'narration': ' '.join(desc_words),
-                            'chq_ref': ref_cell.strip(),
-                            'debit': abs(d_amt),
-                            'credit': abs(c_amt),
-                            'balance': clean_amount(bal_cell)
-                        }
-                    else:
-                        if current_txn:
-                            continuation = [w['text'] for w in lwords if not DATE_REGEX.match(w['text']) and clean_amount(w['text']) == 0.0]
-                            if continuation:
-                                current_txn['narration'] += " " + ' '.join(continuation)
+                        b_amt = clean_amount(bal_cell)
+                        narration = ' '.join(desc_words).strip()
 
-                if current_txn:
-                    transactions.append(current_txn)
+                        if txn_date:
+                            transactions.append({
+                                'page': page_idx + 1,
+                                'date_str': txn_date,
+                                'val_date_str': val_date_cell.strip() or txn_date,
+                                'narration': narration,
+                                'chq_ref': ref_cell.strip(),
+                                'debit': abs(d_amt),
+                                'credit': abs(c_amt),
+                                'balance': b_amt
+                            })
+                        elif "B/F" in row_text_upper and (b_amt or not transactions):
+                            # Opening balance row
+                            transactions.append({
+                                'page': page_idx + 1,
+                                'date_str': val_date_cell.strip() or "01-09-2026",
+                                'val_date_str': val_date_cell.strip() or "01-09-2026",
+                                'narration': "B/F",
+                                'chq_ref': "",
+                                'debit': 0.0,
+                                'credit': 0.0,
+                                'balance': b_amt
+                            })
+
+                else:
+                    # Sequential line-based parsing for borderless statements (e.g. HDFC)
+                    current_txn = None
+                    for y in sorted_ys:
+                        if header_y is not None and page_idx == 0 and y <= header_y + 4:
+                            continue
+
+                        lwords = sorted(lines[y], key=lambda x: x['x0'])
+                        ltext = ' '.join(w['text'] for w in lwords).strip()
+                        ltext_upper = ltext.upper()
+
+                        # Termination / Stop markers
+                        if any(sm in ltext_upper for sm in STOP_MARKERS):
+                            if current_txn:
+                                transactions.append(current_txn)
+                                current_txn = None
+                            statement_ended = True
+                            break
+
+                        # Header noise filtering
+                        if any(noise in ltext_upper for noise in [
+                            "STATEMENT OF ACCOUNT", "GENERATED ON", "PAGE NO", "REGISTERED OFFICE ADDRESS",
+                            "CONTENTS OF THIS STATEMENT", "THIS IS A COMPUTER"
+                        ]):
+                            continue
+
+                        # Header line repetition on next pages
+                        if ("Date" in ltext or "DATE" in ltext) and ("Narration" in ltext or "Particulars" in ltext or "NARRATION" in ltext):
+                            continue
+
+                        first_word = lwords[0]['text'].strip()
+
+                        date_cell = ""
+                        val_date_cell = ""
+                        desc_words = []
+                        ref_cell = ""
+                        debit_cell = ""
+                        credit_cell = ""
+                        bal_cell = ""
+                        amount_cell = ""
+
+                        for w in lwords:
+                            x_mid = (w['x0'] + w['x1']) / 2
+                            assigned_col = None
+                            for cb in col_bounds:
+                                if cb['left'] <= x_mid < cb['right']:
+                                    assigned_col = cb['kind']
+                                    break
+                            if not assigned_col:
+                                continue
+
+                            if assigned_col == 'date':
+                                date_cell += (" " + w['text'] if date_cell else w['text'])
+                            elif assigned_col == 'val_date':
+                                val_date_cell += (" " + w['text'] if val_date_cell else w['text'])
+                            elif assigned_col == 'desc':
+                                desc_words.append(w['text'])
+                            elif assigned_col == 'ref':
+                                ref_cell += (" " + w['text'] if ref_cell else w['text'])
+                            elif assigned_col == 'debit':
+                                debit_cell += w['text']
+                            elif assigned_col == 'credit':
+                                credit_cell += w['text']
+                            elif assigned_col == 'balance':
+                                bal_cell += w['text']
+                            elif assigned_col == 'amount':
+                                amount_cell += w['text']
+
+                        # Check for date match on first word or date column
+                        is_new_txn = False
+                        txn_date = None
+                        if DATE_REGEX.match(first_word):
+                            is_new_txn = True
+                            txn_date = first_word
+                        elif date_cell and DATE_REGEX.match(date_cell.strip()):
+                            is_new_txn = True
+                            txn_date = date_cell.strip()
+
+                        if is_new_txn and txn_date:
+                            if current_txn:
+                                transactions.append(current_txn)
+
+                            d_amt = clean_amount(debit_cell)
+                            c_amt = clean_amount(credit_cell)
+                            if amount_cell and not d_amt and not c_amt:
+                                amt_val = clean_amount(amount_cell)
+                                if amt_val < 0 or 'DR' in amount_cell.upper():
+                                    d_amt = abs(amt_val)
+                                else:
+                                    c_amt = abs(amt_val)
+
+                            current_txn = {
+                                'page': page_idx + 1,
+                                'date_str': txn_date,
+                                'val_date_str': val_date_cell.strip() or txn_date,
+                                'narration': ' '.join(desc_words),
+                                'chq_ref': ref_cell.strip(),
+                                'debit': abs(d_amt),
+                                'credit': abs(c_amt),
+                                'balance': clean_amount(bal_cell)
+                            }
+                        else:
+                            if current_txn:
+                                # Keep all continuation words in description column
+                                cont_words = [w['text'] for w in lwords if any(cb['kind'] == 'desc' and cb['left'] <= (w['x0']+w['x1'])/2 < cb['right'] for cb in col_bounds)]
+                                if not cont_words:
+                                    cont_words = [w['text'] for w in lwords if not DATE_REGEX.match(w['text']) and (clean_amount(w['text']) == 0.0 or '/' in w['text'] or '@' in w['text'] or '-' in w['text'])]
+                                if cont_words:
+                                    current_txn['narration'] += " " + ' '.join(cont_words)
+
+                    if current_txn:
+                        transactions.append(current_txn)
+
+                if statement_ended:
+                    break
 
         # =====================================================================
         # STRATEGY 2: Universal Table Extraction (Bordered Grid Statements like SBI, ICICI, PNB)
@@ -477,6 +665,9 @@ def parse_universal_statement(file_path: str, password: Optional[str] = None) ->
                         for row in table[header_row_idx + 1:]:
                             if not row or not row[col_map['date']]:
                                 continue
+                            row_str = ' '.join(str(c or '').upper() for c in row)
+                            if any(sm in row_str for sm in STOP_MARKERS):
+                                break
                             date_str = str(row[col_map['date']]).strip()
                             iso_d, _, _ = parse_date(date_str)
                             if not iso_d:
@@ -518,8 +709,8 @@ def parse_universal_statement(file_path: str, password: Optional[str] = None) ->
             continue
 
         val_iso, _, _ = parse_date(t.get('val_date_str'))
-        party = extract_party_name(t['narration'])
         amt = t['credit'] if t['credit'] > 0 else -t['debit']
+        party = extract_party_name(t['narration'], amount=amt, is_credit=(t['credit'] > 0))
 
         results.append({
             "transaction_date": iso_date,

@@ -88,42 +88,75 @@ async def health_check():
 UPLOAD_DIR = os.path.abspath("uploaded_statements")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-def extract_party_name(narration: str) -> str:
+def extract_party_name(narration: str, amount: float = 0.0, is_credit: Optional[bool] = None) -> str:
     if not narration:
         return "Unknown"
     narration = narration.strip()
+    upper = narration.upper()
+
+    if is_credit is None:
+        is_credit = (amount > 0)
+
+    # 0. Opening Balance
+    if upper.startswith("B/F") or upper in ("B/F", "B/F.", "B/F-"):
+        return "B/F"
+
+    # 1. Interest Matching Priority (Int.Pd, Interest Paid, Interest Credit)
+    if ":INT.PD:" in upper or "INT.PD:" in upper or "INT.PD" in upper:
+        return "Interest Credit" if is_credit else "Interest Charge"
     
-    # UPI format: UPI-<NAME>-<VPA>
+    if "INTEREST" in upper or "INT PAID" in upper or "INT. PAID" in upper or "INT.CR" in upper:
+        return "Interest Credit" if is_credit else "Interest Charge"
+
+    # 2. Bank Charges & SMS Charges
+    if "SMSCHGS" in upper or "SMS CHGS" in upper or "SMS CHARGES" in upper:
+        return "SMS Charges"
+    if "CONSOLIDATED CHARGES" in upper or "SERVICE CHARGES" in upper or "CHG:" in upper:
+        return "Bank Charges"
+
+    # 3. Direction-Aware ATM / Cash Withdrawal Check
+    if "NWD-" in upper or "ATM" in upper or "CASH WDL" in upper or "CASH WITHDRAWAL" in upper:
+        if is_credit:
+            return "ATM Reversal / Refund"
+        else:
+            return "Cash Withdrawal (ATM)"
+
+    # 4. UPI Patterns
+    # Pattern A: <NAME> UPI/... or <NAME> UPI-... (common in ICICI, where party name precedes UPI)
+    m = re.match(r'^([A-Za-z\s\.\&]+?)\s+(?:UPI[\/-]|IMPS[\/-]|NEFT[\/-])', narration)
+    if m and len(m.group(1).strip()) > 2 and not m.group(1).upper().startswith(("B/F", "BY ", "TO ")):
+        return m.group(1).strip()
+
+    # Pattern B: UPI-<NAME>-<VPA>
     m = re.match(r'UPI-([A-Za-z0-9\s]+?)(?:-[A-Za-z0-9@]+|\s*@|\/|$)', narration)
     if m:
         return m.group(1).replace('-', ' ').strip()
-        
-    # NEFT / RTGS / IMPS format
+
+    # Pattern C: UPI/<NAME>/...
+    m = re.match(r'UPI\/([A-Za-z0-9\s]+?)(?:\/|$)', narration)
+    if m:
+        return m.group(1).replace('-', ' ').strip()
+
+    # 5. NEFT / RTGS / IMPS pattern
     m = re.match(r'(?:NEFT|RTGS|IMPS)(?:CR|DR)?-[0-9A-Za-z]+-(?:REM-)?([A-Za-z0-9\s]+?)(?:-[A-Za-z0-9]+|\/|$)', narration)
     if m:
         return m.group(1).replace('-', ' ').strip()
-        
-    # ACH / NACH format
-    m = re.match(r'(?:ACH|NACH)(?:D|CR|DR)?-([A-Za-z0-9\s\.&]+?)(?:-[0-9]+|\/|$)', narration)
+
+    # 6. ACH / NACH pattern
+    m = re.match(r'(?:ACH|NACH)(?:D|CR|DR)?-([A-Za-z0-9\s\.\&]+?)(?:-[0-9]+|\/|$)', narration)
     if m:
         return m.group(1).replace('-', ' ').strip()
-        
-    # Cheque format
+
+    # 7. Cheque pattern
     m = re.match(r'(?:CHQPAID|CHQREC)-[A-Za-z0-9]+-[A-Za-z0-9]+-([A-Za-z0-9\s]+)', narration)
     if m:
         return m.group(1).strip()
-        
-    # ATM Cash withdrawal
-    if narration.startswith("NWD-"):
-        return "Cash Withdrawal (ATM)"
-        
-    if "INTEREST" in narration.upper():
-        return "Bank Interest"
-        
-    if "AUTOPAY" in narration.upper() or "BILLPAY" in narration.upper():
+
+    if "AUTOPAY" in upper or "BILLPAY" in upper:
         return "Bill Payment / AutoPay"
-        
-    return narration.split('-')[0].strip()[:30]
+
+    clean = narration.split('-')[0].split('/')[0].strip()[:35]
+    return clean or "Unknown"
 
 def parse_bank_statement(file_path: str):
     transactions = []
@@ -348,8 +381,8 @@ def parse_bank_statement(file_path: str):
             yr = datetime.date.today().year
             month = datetime.date.today().month
             
-        party = extract_party_name(t['narration'])
         amt = t['credit'] if t['credit'] > 0 else -t['debit']
+        party = extract_party_name(t['narration'], amount=amt, is_credit=(t['credit'] > 0))
         
         results.append({
             "transaction_date": iso_date,
