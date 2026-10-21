@@ -253,8 +253,8 @@ export default function EmailAuth() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-900 text-slate-100">
-      <div className="w-full max-w-md bg-white text-slate-900 rounded-2xl shadow-2xl border border-slate-100 p-8 space-y-6">
+    <div className="min-h-[100dvh] flex items-center justify-center p-3 sm:p-6 bg-slate-900 text-slate-100 pt-safe pb-safe pl-safe pr-safe">
+      <div className="w-full max-w-md bg-white text-slate-900 rounded-2xl shadow-2xl border border-slate-100 p-5 sm:p-8 space-y-5 sm:space-y-6 my-auto">
         
         {/* App Branding */}
         <div className="text-center space-y-2">

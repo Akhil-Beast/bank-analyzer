@@ -949,21 +949,21 @@ export default function TransactionDashboard() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col text-slate-800">
+    <div className="min-h-[100dvh] bg-slate-50 flex flex-col text-slate-800 overflow-x-hidden">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between gap-2 shadow-2xs pt-safe">
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between gap-2 shadow-2xs pt-safe pl-safe pr-safe min-h-[56px] sm:min-h-[64px]">
         {/* Logo & Brand */}
         <div className="flex items-center gap-2 sm:gap-4 shrink-0 min-w-0">
           <div className="flex items-center gap-1.5 sm:gap-2">
             <Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 shrink-0" />
-            <span className="font-extrabold text-base sm:text-xl tracking-tight text-slate-900 truncate">BankAnalyzer</span>
+            <span className="font-extrabold text-sm sm:text-xl tracking-tight text-slate-900 truncate">BankAnalyzer</span>
           </div>
           <div className="h-5 w-px bg-slate-200 hidden md:block" />
           {/* Global Date Range Indicator */}
           <div className="hidden lg:flex items-center gap-2 text-xs bg-slate-100 px-3 py-1.5 rounded-full text-slate-600 font-medium">
-            <Calendar className="w-3.5 h-3.5 text-blue-600" />
+            <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
             <span>Overall Statement Period:</span>
-            <b className="text-slate-900">{globalDateRange.start} → {globalDateRange.end}</b>
+            <b className="text-slate-900 whitespace-nowrap">{globalDateRange.start} → {globalDateRange.end}</b>
           </div>
         </div>
 
@@ -1116,7 +1116,7 @@ export default function TransactionDashboard() {
       )}
 
       {/* Main Container */}
-      <div className="flex-1 p-3.5 sm:p-6 max-w-[1600px] w-full mx-auto space-y-4 sm:space-y-6">
+      <div className="flex-1 p-3 sm:p-5 lg:p-6 max-w-[1600px] w-full mx-auto space-y-4 sm:space-y-6 pb-24 lg:pb-8 pl-safe pr-safe">
         {/* Upload Result Notification Card */}
         {uploadResult && (
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 sm:p-4 flex items-start justify-between shadow-2xs animate-in fade-in">
@@ -1301,17 +1301,16 @@ export default function TransactionDashboard() {
             <>
               {/* Mobile Backdrop Overlay (< lg) */}
               <div 
-                className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs lg:hidden animate-in fade-in"
+                className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs lg:hidden animate-in fade-in modal-backdrop"
                 onClick={() => setIsFilterPanelOpen(false)}
               />
 
               {/* Drawer (< lg) & Sticky Sidebar (lg+) container */}
               <aside 
-                className="fixed inset-y-0 right-0 z-50 w-full max-w-xs sm:max-w-sm bg-white shadow-2xl p-4 sm:p-5 flex flex-col justify-between overflow-hidden animate-in slide-in-from-right duration-200 lg:static lg:inset-auto lg:z-auto lg:w-80 lg:shrink-0 lg:shadow-sm lg:rounded-xl lg:border lg:border-slate-200 lg:top-24 lg:self-start lg:animate-in lg:fade-in lg:slide-in-from-left-4"
-                style={{ maxHeight: '100dvh' }}
+                className="fixed inset-y-0 right-0 z-50 w-[88vw] max-w-[340px] sm:max-w-sm bg-white shadow-2xl p-4 sm:p-5 flex flex-col justify-between overflow-hidden animate-in slide-in-from-right duration-200 pt-safe pb-safe pl-safe pr-safe lg:static lg:inset-auto lg:z-auto lg:w-72 xl:w-80 lg:shrink-0 lg:shadow-sm lg:rounded-xl lg:border lg:border-slate-200 lg:top-24 lg:self-start lg:pt-4 lg:pb-4 lg:animate-in lg:fade-in lg:slide-in-from-left-4 max-h-[100dvh] modal-container"
               >
                 {/* Header with Navigation Tabs */}
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0 gap-2">
                   <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs font-bold">
                     <button
                       onClick={() => setSidebarTab('filters')}
@@ -1341,10 +1340,11 @@ export default function TransactionDashboard() {
                         localStorage.setItem('bankanalyzer_filter_open', 'false');
                       }
                     }}
-                    className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 cursor-pointer"
+                    className="w-8 h-8 sm:w-9 sm:h-9 mt-0.5 sm:mt-1 flex items-center justify-center text-slate-400 hover:text-slate-700 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer shadow-2xs shrink-0"
                     title="Close panel"
+                    aria-label="Close filters and statements panel"
                   >
-                    <X className="w-5 h-5 lg:hidden" />
+                    <X className="w-4 h-4 sm:w-5 sm:h-5 lg:hidden" />
                     <ChevronLeft className="w-4 h-4 hidden lg:block" />
                   </button>
                 </div>
@@ -1746,8 +1746,8 @@ export default function TransactionDashboard() {
               )}
             </div>
 
-            {/* Desktop Table View (md: block) */}
-            <div className="hidden md:block overflow-x-auto flex-1 max-h-[620px]">
+            {/* Desktop & Tablet Table View (md: block) */}
+            <div className="hidden md:block overflow-x-auto flex-1 max-h-[60vh] lg:max-h-[68vh] xl:max-h-[75vh] touch-scroll">
               <table className="w-full text-left border-collapse">
                 <thead className="bg-slate-100 text-[11px] font-bold text-slate-600 uppercase tracking-wider sticky top-0 z-10 border-b border-slate-200">
                   {table.getHeaderGroups().map(headerGroup => (
@@ -1876,15 +1876,15 @@ export default function TransactionDashboard() {
       {/* VIEW IN PDF STATEMENT MODAL */}
       {previewDocId && (
         <div 
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4"
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-0 sm:p-3 md:p-4 lg:p-6 modal-backdrop pt-safe pb-safe pl-safe pr-safe"
           onClick={() => setPreviewDocId(null)}
         >
           <div 
-            className="bg-white rounded-none sm:rounded-2xl shadow-2xl w-full max-w-5xl h-full sm:h-[88vh] flex flex-col overflow-hidden animate-in zoom-in-95"
+            className="bg-white rounded-none sm:rounded-2xl shadow-2xl w-full max-w-6xl h-full sm:h-[88vh] sm:max-h-[min(92vh,92dvh)] flex flex-col overflow-hidden animate-in zoom-in-95 modal-container"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="px-3 sm:px-6 py-2.5 sm:py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between bg-slate-50 gap-2 shrink-0">
+            <div className="px-3 sm:px-6 py-2.5 sm:py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between bg-slate-50 gap-2 shrink-0 pt-[max(0.6rem,env(safe-area-inset-top))]">
               <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                 <div className="p-1.5 sm:p-2 bg-blue-100 text-blue-700 rounded-lg shrink-0">
                   <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -1894,7 +1894,7 @@ export default function TransactionDashboard() {
                     Statement Page Viewer
                   </h3>
                   {previewTxn && (
-                    <p className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[200px] sm:max-w-md">
+                    <p className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[180px] sm:max-w-md">
                       <b>{previewTxn.name}</b> • {previewTxn.transaction_date} • 
                       <span className={previewTxn.amount >= 0 ? 'text-green-600 font-bold ml-1' : 'text-red-600 font-bold ml-1'}>
                         ₹{Math.abs(previewTxn.amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
@@ -2000,12 +2000,14 @@ export default function TransactionDashboard() {
                   <span>New Tab</span>
                 </a>
 
-                {/* Close Button */}
+                {/* Close Button - Moved slightly downward and enhanced accessibility */}
                 <button 
                   onClick={() => setPreviewDocId(null)}
-                  className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200 cursor-pointer ml-0.5"
+                  className="w-8 h-8 sm:w-9 sm:h-9 mt-0.5 sm:mt-1 flex items-center justify-center text-slate-400 hover:text-slate-700 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer shadow-2xs shrink-0 ml-1"
+                  title="Close viewer"
+                  aria-label="Close statement page viewer"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </div>
             </div>
@@ -2069,28 +2071,31 @@ export default function TransactionDashboard() {
 
       {/* PASSWORD PROTECTED PDF UNLOCK MODAL */}
       {pendingPasswordFile && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 modal-backdrop pt-safe pb-safe pl-safe pr-safe">
           <div 
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 sm:p-6 max-h-[92vh] overflow-y-auto animate-in zoom-in-95 border border-slate-100"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 sm:p-6 max-h-[min(90dvh,88vh)] overflow-y-auto animate-in zoom-in-95 border border-slate-100 modal-container"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="flex items-start justify-between pb-3.5 border-b border-slate-100 gap-3">
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                 <div className="p-2 sm:p-2.5 bg-amber-100 text-amber-700 rounded-xl shrink-0">
                   <Lock className="w-5 h-5" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h3 className="font-bold text-slate-900 text-base">Password Protected PDF</h3>
-                  <p className="text-xs text-slate-500 truncate max-w-[200px] sm:max-w-[240px]" title={pendingPasswordFile.name}>
+                  <p className="text-xs text-slate-500 truncate" title={pendingPasswordFile.name}>
                     {pendingPasswordFile.name}
                   </p>
                 </div>
               </div>
+              {/* Close Button - Moved slightly downward for accessibility */}
               <button 
                 onClick={() => { setPendingPasswordFile(null); setStatementPassword(''); setPasswordError(null); setDropzoneKey(prev => prev + 1); }}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-100 cursor-pointer"
+                className="w-8 h-8 sm:w-9 sm:h-9 mt-1 sm:mt-1.5 flex items-center justify-center text-slate-400 hover:text-slate-700 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer shadow-2xs shrink-0"
+                title="Close dialog"
+                aria-label="Close password unlock dialog"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             </div>
 
@@ -2154,32 +2159,35 @@ export default function TransactionDashboard() {
       {/* Biometric Management Modal */}
       {showBiometricModal && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in modal-backdrop pt-safe pb-safe pl-safe pr-safe"
           onClick={() => { setShowBiometricModal(false); setBioModalError(null); setBioPasswordInput(''); }}
         >
           <div 
-            className="bg-white rounded-2xl shadow-2xl border border-slate-200 p-5 sm:p-6 max-w-md w-full space-y-4 max-h-[92vh] overflow-y-auto"
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 p-5 sm:p-6 max-w-md w-full space-y-4 max-h-[min(90dvh,88vh)] overflow-y-auto modal-container"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="flex items-start justify-between pb-3.5 border-b border-slate-100 gap-3">
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                 <div className={`p-2 sm:p-2.5 rounded-xl ${biometricProfile ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'} shrink-0`}>
                   <Fingerprint className="w-5 h-5" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h3 className="font-bold text-slate-900 text-base">
                     {biometricProfile ? 'Biometric Sign-In Active' : 'Enable Fingerprint Sign-In'}
                   </h3>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 truncate">
                     {biometricProfile ? 'Device security management' : '1-touch sign-in on this device'}
                   </p>
                 </div>
               </div>
+              {/* Close Button - Moved slightly downward for accessibility */}
               <button 
                 onClick={() => { setShowBiometricModal(false); setBioModalError(null); setBioPasswordInput(''); }}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-100 cursor-pointer"
+                className="w-8 h-8 sm:w-9 sm:h-9 mt-1 sm:mt-1.5 flex items-center justify-center text-slate-400 hover:text-slate-700 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer shadow-2xs shrink-0"
+                title="Close dialog"
+                aria-label="Close biometric settings dialog"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             </div>
 
