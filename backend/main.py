@@ -27,9 +27,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi import Request
 import traceback
+
+@app.middleware("http")
+async def handle_head_requests(request: Request, call_next):
+    if request.method == "HEAD":
+        request.scope["method"] = "GET"
+        response = await call_next(request)
+        return Response(
+            content=b"",
+            status_code=response.status_code,
+            headers=dict(response.headers),
+            media_type=response.media_type
+        )
+    return await call_next(request)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -80,9 +93,11 @@ def get_authenticated_user(authorization: Optional[str] = None, token: Optional[
         raise HTTPException(status_code=401, detail=f"Authentication verification failed: {str(e)}")
 
 
-@app.get("/")
-@app.get("/health")
-@app.get("/api/v1/health")
+@app.api_route("/", methods=["GET", "HEAD"])
+@app.api_route("/health", methods=["GET", "HEAD"])
+@app.api_route("/health/", methods=["GET", "HEAD"])
+@app.api_route("/api/v1/health", methods=["GET", "HEAD"])
+@app.api_route("/api/v1/health/", methods=["GET", "HEAD"])
 async def health_check():
     return {"status": "ok", "message": "Bank Analyzer API is running"}
 
@@ -635,8 +650,10 @@ async def upload_statement(
         "content_hash": content_hash
     }
 
-@app.get("/api/v1/transactions")
-@app.get("/transactions")
+@app.api_route("/api/v1/transactions", methods=["GET", "HEAD"])
+@app.api_route("/api/v1/transactions/", methods=["GET", "HEAD"])
+@app.api_route("/transactions", methods=["GET", "HEAD"])
+@app.api_route("/transactions/", methods=["GET", "HEAD"])
 async def get_transactions(authorization: Optional[str] = Header(None), token: Optional[str] = Query(None)):
     if not authorization and not token:
         # Unauthenticated keep-awake ping returns 200 OK
@@ -648,8 +665,10 @@ async def get_transactions(authorization: Optional[str] = Header(None), token: O
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/documents")
-@app.get("/documents")
+@app.api_route("/api/v1/documents", methods=["GET", "HEAD"])
+@app.api_route("/api/v1/documents/", methods=["GET", "HEAD"])
+@app.api_route("/documents", methods=["GET", "HEAD"])
+@app.api_route("/documents/", methods=["GET", "HEAD"])
 async def get_documents(authorization: Optional[str] = Header(None), token: Optional[str] = Query(None)):
     if not authorization and not token:
         # Unauthenticated keep-awake ping returns 200 OK
