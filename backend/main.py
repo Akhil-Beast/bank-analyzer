@@ -638,6 +638,9 @@ async def upload_statement(
 @app.get("/api/v1/transactions")
 @app.get("/transactions")
 async def get_transactions(authorization: Optional[str] = Header(None), token: Optional[str] = Query(None)):
+    if not authorization and not token:
+        # Unauthenticated keep-awake ping returns 200 OK
+        return []
     user_id, _ = get_authenticated_user(authorization, token)
     try:
         res = supabase.table('transactions').select('*').eq('user_id', user_id).order('transaction_date', desc=True).execute()
@@ -648,6 +651,9 @@ async def get_transactions(authorization: Optional[str] = Header(None), token: O
 @app.get("/api/v1/documents")
 @app.get("/documents")
 async def get_documents(authorization: Optional[str] = Header(None), token: Optional[str] = Query(None)):
+    if not authorization and not token:
+        # Unauthenticated keep-awake ping returns 200 OK
+        return []
     user_id, _ = get_authenticated_user(authorization, token)
     try:
         res = supabase.table('documents').select('*').eq('user_id', user_id).order('upload_date', desc=True).execute()
