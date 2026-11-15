@@ -81,6 +81,7 @@ def get_authenticated_user(authorization: Optional[str] = None, token: Optional[
 
 
 @app.get("/")
+@app.get("/health")
 @app.get("/api/v1/health")
 async def health_check():
     return {"status": "ok", "message": "Bank Analyzer API is running"}
